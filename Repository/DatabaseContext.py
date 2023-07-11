@@ -47,13 +47,12 @@ class DatabaseContext:
     QueryGetDeviceAndMeasurements = "SELECT D.`ID`, D.`Name`, P.EventTimeStamp, P.Value, P.DayIndx, P.IsWorking FROM `Devices` as D left join DataPoints as P on D.ID=P.ID WHERE D.Name=%(Name)s order by P.EventTimeStamp desc"
     QueryInsertDevice = "INSERT INTO `Devices`(`Name`) VALUES (%(Name)s)"
 
-    def __init__(self, initialSettings: Settings, connectionString: ConnectionString) -> None:
+    def __init__(self, connectionString: ConnectionString) -> None:
         self._connectionString: ConnectionString = connectionString
         self._logger = logging.getLogger(__name__)
-        self._initialSettings: Settings = initialSettings
-        self.getSettings()
-
-    def getSettings(self) -> Settings:
+        self._initialSettings:Settings = Settings()
+        
+    def getSettings(self, defaultSettings: Settings=None) -> Settings:
         try:
             cnx = mysql.connector.connect(user=self._connectionString.User,
                                           password=self._connectionString.Password,
@@ -62,14 +61,15 @@ class DatabaseContext:
             cursor = cnx.cursor(dictionary=True)
             cursor.execute(DatabaseContext.QueryGetSettings)
             row = cursor.fetchone()
-            if row == None or cursor.rowcount <= 0:
-                params = self._initialSettings.toDictionary()
+            if row == None or cursor.rowcount <= 0 and defaultSettings!= NotImplemented:
+                params = defaultSettings.toDictionary()
                 cursor.execute(DatabaseContext.QueryInsertSettings, params)
                 cnx.commit()
                 cursor.execute(DatabaseContext.QueryGetSettings)
-                row = cursor.fetchone()
-
-            self._initialSettings.update(row)
+                self._initialSettings.update(defaultSettings)
+                
+            if row!=None and isinstance(row, dict):
+                self._initialSettings.update(row)
             cursor.close()
         except Exception as e:
             self._logger.critical(e, exc_info=True)

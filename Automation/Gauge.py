@@ -1,4 +1,6 @@
 from datetime import datetime
+import logging
+
 from Interfaces.IGauge import IGauge
 
 
@@ -6,7 +8,12 @@ class Gauge(IGauge):
 
     def __init__(self) -> None:
         super().__init__()
+        self._logger = logging.getLogger(__name__)
         self._sensors = Gauge.getDevices()
+
+    def getDevices(self) -> list:
+        return Gauge.getDevices()
+
 
     @staticmethod
     def getDevices() -> list:
@@ -21,8 +28,10 @@ class Gauge(IGauge):
 
         if len(self._sensors) == 0:
             self._sensors = self.getDevices()
-
-        return [self._read(sensor) for sensor in self._sensors]
+        result ={sensor: self._read(sensor) for sensor in self._sensors}
+        return result
 
     def _read(self, sensorName: str) -> float:
-        return (datetime.now().microsecond % 10000) / 1000.0
+        value = (datetime.now().microsecond % 10000) / 1000.0
+        self._logger.warn(f"temp[{sensorName}] = {value}")
+        return value
