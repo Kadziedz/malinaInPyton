@@ -33,5 +33,5 @@ class Gauge(IGauge):
 
     def _read(self, sensorName: str) -> float:
         value = (datetime.now().microsecond % 10000) / 1000.0
-        self._logger.warn(f"temp[{sensorName}] = {value}")
+        self._logger.debug(f"temp[{sensorName}] = {value}")
         return value

@@ -5,12 +5,12 @@ class Thermometer(Serializable):
     def __init__(self, name: str, temperature: float) -> None:
         super().__init__()
         self.Name: str = name
-        self.Temperature: float = temperature
+        self.Temperature: float = -999 if temperature == None else temperature
 
     def toDictionary(self):
         document = dict()
         document["Name"] = self.Name
-        document["Temperature"] = self.Temperature
+        document["Temperature"] = -999 if self.Temperature==None else self.Temperature
 
         return document
 

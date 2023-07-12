@@ -46,3 +46,6 @@ class ObjectState(Serializable):
             self.HigherTempSensor: str = src["HigherTempSensor"]
             self.IsAutoMode: bool = bool(src["IsAutoMode"])
             self.Device: list = [Thermometer(item["Name"], item["Temperature"]) for item in src["Device"]]
+        self.LowerSensorTemp = -999 if self.LowerSensorTemp ==None else src.LowerSensorTemp
+        self.HigherSensorTemp = -999 if self.HigherSensorTemp ==None else  src.HigherSensorTemp
+        self.AmbientSensorTemp = -999 if self.AmbientSensorTemp ==None else  src.AmbientSensorTemp
