@@ -8,4 +8,4 @@ class CommandsController(ControllerRoot):
       
       def post(self, command:str):
             self._logger.debug(f"command {command} received")
-            return self._messageBus.ExecuteCommand(command), 200
+            return self._messageBus.executeCommand(command), 200

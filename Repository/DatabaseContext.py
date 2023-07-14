@@ -3,7 +3,7 @@ from Interfaces.IGauge import IGauge
 from Models.Config import ConnectionString
 from Models.Settings import Settings
 import mysql.connector
-from Models.DTO.mysql import Device, DataPoint
+from Models.DTO.dtos import Device, DataPoint
 import logging
 from datetime import datetime
 
@@ -44,7 +44,8 @@ class DatabaseContext:
         %(MaxStateTime)s,\
         %(ControlInterval)s,\
         %(DataSaveInterval)s)"
-    QueryGetDeviceAndMeasurements = "SELECT D.`ID`, D.`Name`, P.EventTimeStamp, P.Value, P.DayIndx, P.IsWorking FROM `Devices` as D left join DataPoints as P on D.ID=P.ID WHERE D.Name=%(Name)s order by P.EventTimeStamp desc"
+    QueryGetDevices = "SELECT D.`ID`, D.`Name` FROM `Devices` as D "
+    QueryGetDevice = "SELECT D.`ID`, D.`Name` FROM `Devices` as D WHERE D.Name=%(Name)s"
     QueryInsertDevice = "INSERT INTO `Devices`(`Name`) VALUES (%(Name)s)"
 
     def __init__(self, connectionString: ConnectionString) -> None:
@@ -78,20 +79,36 @@ class DatabaseContext:
             cnx.close()
             return self._initialSettings
 
-    def setSettings(self, settings: Settings) -> bool:
+    def createSettings(self, settings: Settings) -> bool:
         try:
             cnx = mysql.connector.connect(user=self._connectionString.User,
                                           password=self._connectionString.Password,
                                           host=self._connectionString.Host,
                                           database=self._connectionString.Database)
             cursor = cnx.cursor()
-            cursor.execute(DatabaseContext.QueryInsertSettings,
-                           settings.toDictionary())
+            cursor.execute(DatabaseContext.QueryInsertSettings, settings.toDictionary())
+            cnx.commit()
             cursor.close()
         finally:
             cnx.close()
 
-    def getDevices(self, physicalDeviceNamesList:list) -> dict:
+    def getDevices(self) -> list:
+        result = defaultdict()
+        try:
+            cnx = mysql.connector.connect(user=self._connectionString.User,
+                                          password=self._connectionString.Password,
+                                          host=self._connectionString.Host,
+                                          database=self._connectionString.Database)
+            cursor = cnx.cursor(dictionary=True)
+            cursor.execute(DatabaseContext.QueryGetDevices )
+            rows = cursor.fetchall()
+            result = [Device(int(row["ID"]), str(row["Name"]), None) for row in rows]
+        finally:
+            cnx.close()
+
+        return result
+
+    def synchronizeDevices(self, physicalDeviceNamesList:list) -> dict:
         result = defaultdict()
         try:
             cnx = mysql.connector.connect(user=self._connectionString.User,
@@ -100,8 +117,7 @@ class DatabaseContext:
                                           database=self._connectionString.Database)
             cursor = cnx.cursor(dictionary=True)
             for name in physicalDeviceNamesList:
-                cursor.execute(
-                    DatabaseContext.QueryGetDeviceAndMeasurements, {"Name": name})
+                cursor.execute(DatabaseContext.QueryGetDevice, {"Name": name})
                 rows = cursor.fetchall()
                 idDevice = 0
                 points = list()
@@ -111,7 +127,7 @@ class DatabaseContext:
                     cnx.commit()
                 else:
                     idDevice = int(rows[0]["ID"])
-                    points = [DataPoint(item["EventTimeStamp"],  float(item["Value"]), int(item['DayIndx']), bool(item['IsWorking'])) for item in rows if item["Value"]!= None]
+                    points = None#[DataPoint(item["EventTimeStamp"],  float(item["Value"]), int(item['DayIndx']), bool(item['IsWorking'])) for item in rows if item["Value"]!= None]
                 newDevice = Device(idDevice, name, points)
                 result[name]= newDevice
             cursor.close()
