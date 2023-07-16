@@ -23,7 +23,7 @@ class IMessageBus(ABC):
         pass
 
     @abstractmethod
-    def ExecuteCommand(self, command: str) -> bool:
+    def executeCommand(self, command: str) -> bool:
         pass
 
     @abstractmethod
@@ -32,4 +32,8 @@ class IMessageBus(ABC):
 
     @abstractmethod
     def unregister(self, eventType: str, handler) -> bool:
+        pass
+    
+    @abstractmethod
+    def sendEvent(self, eventArg:object)->None:
         pass

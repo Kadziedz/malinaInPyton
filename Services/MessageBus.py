@@ -50,10 +50,12 @@ class MessageBus(IMessageBus):
         self._events[eventType] -= handler
         return True
 
-    def __onEvent(self, eventType: str, settings: Settings) -> None:
-        if eventType in self._events:
+    def __onEvent(self, eventType: str, eventArg) -> None:
+        if isinstance(eventType, str) and eventType in self._events:
             with self._lock:
-                self._events[eventType](settings)
+                self._events[eventType](eventArg)
+        else:
+            self._logger.critical(f"dropping unknown event type {eventType}")
              
     def getSettings(self) -> Settings:
         self._logger.debug("get settings invoke, ")
@@ -82,24 +84,13 @@ class MessageBus(IMessageBus):
             self._status.update(src)
         self.__onEvent(MessageBus.EVENT_NEW_STATUS, self._status)   
 
-    def ExecuteCommand(self, command: str) -> bool:
-        capitalizedCommand = command.upper()
-        if capitalizedCommand == "AUTO":
-            self._logger.debug(capitalizedCommand+" command received")
-            
+    def executeCommand(self, command: str) -> bool:
+        if(isinstance(command, str)):
+            self._logger.debug(str(command)+" command received")
             return self.__onEvent(MessageBus.EVENT_NEW_COMMAND, command)
-
-        elif capitalizedCommand == "MAN":
-            self._logger.debug(capitalizedCommand+" command received")
-            return self.__onEvent(MessageBus.EVENT_NEW_COMMAND, command)
-
-        elif capitalizedCommand == "ON":
-            self._logger.debug(capitalizedCommand+" command received")
-            return self.__onEvent(MessageBus.EVENT_NEW_COMMAND, command)
-
-        elif capitalizedCommand == "OFF":
-            self._logger.debug(capitalizedCommand+" command received")
-            return self.__onEvent(MessageBus.EVENT_NEW_COMMAND, command)
-
         return False
+    
+    def sendEvent(self, eventArg:object)->None:
+        eventType:str = str(type(eventArg))
+        self.__onEvent(eventType, eventArg)
 

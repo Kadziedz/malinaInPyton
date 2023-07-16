@@ -37,6 +37,7 @@ class Config(Settings):
         super().update(configDict["Settings"])
         self.ConnectionStrings: dict = {item:  ConnectionString(configDict["ConnectionStrings"][item]) for item in configDict["ConnectionStrings"]}
         self.LogLevel = configDict["Logging"]["LogLevel"]
+        self.GPIO:dict = configDict["GPIO"]
 
     def getSettings(self) -> Settings:
         settings = Settings()
@@ -46,6 +47,7 @@ class Config(Settings):
 
     def toDictionary(self):
         settings = dict()
+        
         settings["LowerTempSensor"] = self.LowerTempSensor
         settings["HigherTempSensor"] = self.HigherTempSensor
         settings["AmbientTempSensor"] = self.AmbientTempSensor
@@ -62,12 +64,14 @@ class Config(Settings):
         settings["LowerTempSensorOffset"] = self.LowerTempSensorOffset
         settings["HigherTempSensorOffset"] = self.HigherTempSensorOffset
         settings["AmbientTempSensorOffset"] = self.AmbientTempSensorOffset
-
-        return {"Settings": settings, "ConnectionStrings": {item: self.ConnectionStrings[item].toDictionary()  for item in  self.ConnectionStrings}, "Logging": {"LogLevel": self.LogLevel}}
-
+        a =super().toDictionary()
+        return {"Settings": settings, "GPIO":self.GPIO, "ConnectionStrings": {item: self.ConnectionStrings[item].toDictionary()  for item in  self.ConnectionStrings}, "Logging": {"LogLevel": self.LogLevel}}
+    
+    @staticmethod
     def getConfig(configFileName: str = 'config.json'):
         return Config(configFileName)
 
+    @staticmethod
     def getConfigDictionary(configFileName: str = 'config.json') -> dict:
         fileName = configFileName
         if Config.isDebug():
@@ -75,6 +79,7 @@ class Config(Settings):
         with open(fileName, 'r') as jsonFile:
             return json.load(jsonFile)
 
+    @staticmethod
     def isDebug():
         gettrace = getattr(sys, 'gettrace', None)
         if gettrace is None:
