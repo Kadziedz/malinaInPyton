@@ -1,50 +1,59 @@
-from Interfaces.IGauge import IGauge
+import datetime
+import logging
+import time
+from typing import Any
+from collections import defaultdict
+from collections.abc import Callable, Iterable, Mapping
+from threading import Lock, Thread
+from Interfaces.IRelay import IRelay
+from Interfaces.ISensor import ISensor
 from Interfaces.IMeasurementFilter import IMeasurementFilter
 from Interfaces.IMessageBus import IMessageBus
 from Models.ObjectState import ObjectState
 from Models.Settings import Settings
 from Models.Thermometer import Thermometer
 from Repository.DatabaseContext import DatabaseContext
+from Services.MeasurementFilter import MeasurementFilter
 from Services.MessageBus import MessageBus
 from Models.Measurements import Measurements
-
-
-import datetime
-import logging
-import time
-from collections import defaultdict
-from collections.abc import Callable, Iterable, Mapping
-from threading import Lock, Thread
-from typing import Any
-
+from Services.SimpleIoc import SimpleIoC
 
 class AutomationController(Thread):
-    def __init__(self, messageBus: IMessageBus, gauge: IGauge, filter: IMeasurementFilter,  databaseContext:DatabaseContext,group: None = None, target: Callable[..., object] | None = None, name: str | None = None, args: Iterable[Any] = ..., kwargs: Mapping[str, Any] | None = None, *, daemon: bool | None = None) -> None:
-        super().__init__(group, target, name, args, kwargs, daemon=daemon)
-        self._databaseContext:DatabaseContext = databaseContext
-        self._messageBus: IMessageBus = messageBus
-        self._meter:IGauge = gauge
-        self._filter: IMeasurementFilter = filter
+    LED_RED:str="RedLED"
+    LED_GREEN:str="GreenLED"
+    LED_YELLOW:str="YellowLED"
+    LED_BLINKER:str="BlinkingLED"
+    RELAY:str="Relay"
+    
+    def __init__(self, ioc:SimpleIoC) -> None:
+        super().__init__()
+        self._databaseContext:DatabaseContext = ioc.getInstance(DatabaseContext)
+        self._messageBus: IMessageBus = ioc.getInstance(IMessageBus)
+        self._meters:dict = ioc.getInstance("thermometers")
+        self._coils:dict = ioc.getInstance("coils")
+        self._filter: IMeasurementFilter = ioc.getInstance(IMeasurementFilter)
         self._lock: Lock = Lock()
         self.__isStopRequested: bool = False
         self._actualSettings:Settings = self._messageBus.getSettings()
         self._cmdAuto:bool= self._actualSettings.IsAuto
         self._cmdRun:bool= False
-        self._actualState:ObjectState = AutomationController.__initializeDataStructures(self._actualSettings, self._meter, self._messageBus, self._databaseContext)
+        self._isRun = False
+        self._isAutoMode = False
+        self._actualState:ObjectState = AutomationController.__initializeDataStructures(self._actualSettings, [key for key in self._meters], self._messageBus, self._databaseContext)
         self._messageBus.updateStatus(self._actualState)
         self._logger:logging= logging.getLogger(__name__)
-
-        messageBus.register(MessageBus.EVENT_NEW_COMMAND, self.onNewCommandReceived)
-        messageBus.register(MessageBus.EVENT_SETTINGS_UPDATE, self.onNewSettings)
+        
+        self._messageBus.register(MessageBus.EVENT_NEW_COMMAND, self.onNewCommandReceived)
+        self._messageBus.register(MessageBus.EVENT_SETTINGS_UPDATE, self.onNewSettings)
         # messageBusSingleton.register(MessageBus.EVENT_NEW_STATUS, self.onNewStatus)
 
     def __del__(self):
             self._messageBus.unregister(MessageBus.EVENT_NEW_COMMAND, self.onNewCommandReceived)
             self._messageBus.unregister(MessageBus.EVENT_SETTINGS_UPDATE, self.onNewSettings)
-
-    def __initializeDataStructures(config:Settings, gauge:IGauge, sb:IMessageBus, db:DatabaseContext)->ObjectState:
+    
+    @staticmethod
+    def __initializeDataStructures(config:Settings, physicalDeviceNamesList:list, sb:IMessageBus, db:DatabaseContext)->ObjectState:
         locState=sb.getStatus()
-        physicalDeviceNamesList = gauge.getDevices()
         devices = db.synchronizeDevices(physicalDeviceNamesList)
         locState.Device = [Thermometer(devices[key].Name, None) for key in devices]
         locState.AmbientSensorTemp = None
@@ -52,6 +61,7 @@ class AutomationController(Thread):
         locState.HigherSensorTemp = None
         return AutomationController.__updateState(config, locState)
 
+    @staticmethod
     def __updateState(config:Settings, status:ObjectState) ->ObjectState:
         status.AmbientTempSensor = config.AmbientTempSensor
         status.LowerTempSensor = config.LowerTempSensor
@@ -75,17 +85,45 @@ class AutomationController(Thread):
         localStatus:ObjectState= ObjectState()
         lastDbWrite:datetime.datetime = datetime.datetime.now()
         measurements:dict = defaultdict()
+        ledBlinker:IRelay= self._coils[AutomationController.LED_BLINKER]
+        ledPumpActive:IRelay = self._coils[AutomationController.LED_RED]
+        ledManualMode:IRelay = self._coils[AutomationController.LED_YELLOW]
+        ledAutoMode:IRelay = self._coils[AutomationController.LED_GREEN]
+        relay:IRelay= self._coils[AutomationController.RELAY]
+        # lastBlink:datetime= actualTime
+        # flipFlop:bool=False
+        workStart:datetime= actualTime
+        workStop:datetime= actualTime
+        lasControlTime:datetime = actualTime
+        
+        relay.set(self._isRun)
+        if self._isAutoMode:
+            ledAutoMode.set(True)
+            ledManualMode.set(False)
+        else:
+            ledAutoMode.set(False)
+            ledManualMode.set(True)
+        relay.set(self._isRun)
+        
         while not self.isStopRequested():
 
             actualTime = datetime.datetime.now()
             delta:datetime.timedelta = actualTime - lastIteration
+            locCmdRun:bool=False
+            locCmdAuto:bool=False
             with self._lock:
                 localSettings.update(self._actualSettings)
                 localStatus.update(self._actualState)
+                locCmdRun = self._cmdRun
+                locCmdAuto= self._cmdAuto
 
-            if delta.total_seconds() >= min([15, (localSettings.DataSaveInterval >> 1)]) :
+            #read temperatures
+            if delta.total_seconds() >= min([4, (localSettings.DataSaveInterval >> 1)]) :
                 lastIteration = actualTime
-                AutomationController.__measureTemperatures(localStatus, self._meter, self._filter, measurements, localSettings, self._logger)
+                measurements.clear()
+                ledBlinker.set(True)
+                AutomationController.__measureTemperatures(localStatus, self._meters, self._filter, measurements, localSettings, self._logger)
+                ledBlinker.set(False)
                 with self._lock:
                     self._actualState.update(localStatus)
                 self._messageBus.updateStatus(localStatus)
@@ -94,16 +132,69 @@ class AutomationController(Thread):
                 if delta.total_seconds()> localSettings.DataSaveInterval and  len(measurements)>0 :
                     lastDbWrite = actualTime
                     #update if required 
-                    self._messageBus.sendEvent(Measurements(measurements))
-                    self._logger.warning(f"store to db requested {str(measurements)}")
-                    measurements.clear()
-            time.sleep(0)
+                    self._messageBus.sendEvent(Measurements(measurements, self._isRun, actualTime))
+                    self._logger.info(f"store to db requested {str(measurements)}")
+                    
+            # delta:datetime.timedelta =  actualTime - lastBlink
+            # # toggle diode on board
+            # if delta.total_seconds()>0.5:
+            #     flipFlop= not flipFlop
+            #     lastBlink= actualTime
+            #     ledBlinker.set(flipFlop)
+              
+            #automatic control iteration
+            delta= actualTime - lasControlTime
+            if self._isAutoMode and(delta.total_seconds() >= localSettings.ControlInterval and (actualTime.hour >= localSettings.DayStart and actualTime.hour <= localSettings.DayStop)):
+                #TO DO 
+                lasControlTime = actualTime
+                lowerTemp = self._filter.Get(localSettings.LowerTempSensor)
+                higherTemp = self._filter.Get(localSettings.HigherTempSensor)
+                ambientTemp = self._filter.Get(localSettings.AmbientTempSensor)
+                
+                maxInactivityTime = localSettings.MaxStateTime
+                pass
+            
+            # ignore command, out of working hours
+            if (self._isRun or locCmdRun) and (self._isAutoMode or locCmdAuto) and (actualTime.hour < localSettings.DayStart or actualTime.hour> localSettings.DayStop):
+                # locCmdRun= False
+                # with self._lock:
+                #     self._cmdRun = False
+                pass
+            
+            #act
+            # change work mode
+            if locCmdAuto != self._isAutoMode :
+                self._isAutoMode = locCmdAuto
+                if self._isAutoMode:
+                    self._logger.warning("work mode AUTO")
+                    ledManualMode.set(False)
+                    ledAutoMode.set(True)
+                else:
+                    self._logger.warning("work mode MAN")
+                    ledManualMode.set(True)
+                    ledAutoMode.set(False)
+                localSettings.IsAuto = locCmdAuto
+                self._messageBus.updateSettings(localSettings)
+            # start/stop pump
+            if locCmdRun != self._isRun :
+                self._isRun= locCmdRun
+                relay.set(self._isRun)
+                ledPumpActive.set(self._isRun)
+                if self._isRun :
+                    workStart= actualTime
+                else:
+                    workStop= actualTime
+                self._messageBus.sendEvent(Measurements(measurements, self._isRun, actualTime))
+                
+            time.sleep(0.3)
 
-    def __measureTemperatures(localStatus:ObjectState, gauge:IGauge, filter:IMeasurementFilter, measurements:dict, localSettings:Settings, logger:logging)->ObjectState:
+    @staticmethod
+    def __measureTemperatures(localStatus:ObjectState, devices:dict, filter:IMeasurementFilter, measurements:dict, localSettings:Settings, logger:logging)->ObjectState:
         thermometers:dict = {device.Name: device for device in localStatus.Device }
-        deviceNames:list = gauge.getDevices()
-        for label in deviceNames:
-            temperature:float = gauge.measure(label)
+
+        for label in devices:
+            sensor:ISensor = devices[label]
+            temperature:float = sensor.measure()
             temperature = AutomationController.__addOffsets(temperature, label, localSettings)
             filteredTemp:float =-999
             if temperature == None:
@@ -120,13 +211,19 @@ class AutomationController(Thread):
                 thermometers[label].Temperature = filteredTemp
             else:
                 localStatus.Device.append(Thermometer(label, filteredTemp))
-        localStatus.AmbientSensorTemp = thermometers[localStatus.AmbientTempSensor].Temperature
-        localStatus.HigherSensorTemp = thermometers[localStatus.HigherTempSensor].Temperature
-        localStatus.LowerSensorTemp = thermometers[localStatus.LowerTempSensor].Temperature
+        if localStatus.AmbientTempSensor in thermometers:
+            localStatus.AmbientSensorTemp = thermometers[localStatus.AmbientTempSensor].Temperature
+            logger.info(f"Ambient temperature sensor [{localStatus.AmbientTempSensor}] = {localStatus.AmbientSensorTemp}")
+        if localStatus.HigherTempSensor in thermometers:
+            localStatus.HigherSensorTemp = thermometers[localStatus.HigherTempSensor].Temperature
+            logger.info(f"High temperature sensor [{localStatus.HigherTempSensor}] = {localStatus.HigherSensorTemp }")
+        if localStatus.LowerTempSensor in thermometers:
+            localStatus.LowerSensorTemp = thermometers[localStatus.LowerTempSensor].Temperature
+            logger.info(f"Low temperature sensor [{localStatus.LowerTempSensor}] = {localStatus.LowerSensorTemp }")
 
         return localStatus
 
-
+    @staticmethod
     def __addOffsets(value:float, deviceName:str,  config:Settings)->None:
         if value == None:
             return None

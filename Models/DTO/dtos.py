@@ -8,6 +8,7 @@ class DataPoint:
     Value: float = 0
     DayIndx: int = 0
     IsWorking: bool = False
+    DeviceID:int = 0
 
 
 @dataclass

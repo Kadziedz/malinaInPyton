@@ -1,5 +1,5 @@
 from collections import defaultdict
-from Interfaces.IGauge import IGauge
+from Interfaces.ISensor import ISensor
 from Models.Config import ConnectionString
 from Models.Settings import Settings
 import mysql.connector
@@ -10,6 +10,24 @@ from datetime import datetime
 
 class DatabaseContext:
     QueryGetSettings = "SELECT `ID`, `LowerTempSensor`, `HigherTempSensor`, `AmbientTempSensor`, `LowerTempSensorOffset`, `HigherTempSensorOffset`, `AmbientTempSensorOffset`, `MinimumTempDiff`, `MinimumAmbientTemp`, `IsAuto`, `DayStart`, `DayStop`, `DecisionDelay`, `MeasurementSamplesCount`, `MaxStateTime`, `ControlInterval`, `DataSaveInterval` FROM `AppSettings` LIMIT 0,1"
+    QueryUpdateSettings ="UPDATE AppSettings SET \
+    `LowerTempSensor` = %(LowerTempSensor)s,\
+    `HigherTempSensor`= %(HigherTempSensor)s,\
+    `AmbientTempSensor`= %(AmbientTempSensor)s,\
+    `LowerTempSensorOffset`= %(LowerTempSensorOffset)s,\
+    `HigherTempSensorOffset`= %(HigherTempSensorOffset)s,\
+    `AmbientTempSensorOffset`= %(AmbientTempSensorOffset)s,\
+    `MinimumTempDiff`= %(MinimumTempDiff)s,\
+    `MinimumAmbientTemp`= %(MinimumAmbientTemp)s,\
+    `IsAuto`= %(IsAuto)s,\
+    `DayStart`= %(DayStart)s,\
+    `DayStop`= %(DayStop)s,\
+    `DecisionDelay`= %(DecisionDelay)s,\
+    `MeasurementSamplesCount`= %(MeasurementSamplesCount)s,\
+    `MaxStateTime`= %(MaxStateTime)s,\
+    `ControlInterval`= %(ControlInterval)s,\
+    `DataSaveInterval`= %(DataSaveInterval)s\
+    WHERE 1=1"
     QueryInsertSettings = "INSERT INTO AppSettings(\
         `LowerTempSensor`, \
         `HigherTempSensor`,\
@@ -47,7 +65,7 @@ class DatabaseContext:
     QueryGetDevices = "SELECT D.`ID`, D.`Name` FROM `Devices` as D "
     QueryGetDevice = "SELECT D.`ID`, D.`Name` FROM `Devices` as D WHERE D.Name=%(Name)s"
     QueryInsertDevice = "INSERT INTO `Devices`(`Name`) VALUES (%(Name)s)"
-
+    QueryInsertPoint = "INSERT INTO `DataPoints`(`EventTimeStamp`, `Value`, `DeviceID`, `DayIndx`, `IsWorking`) VALUES (%(EventTimeStamp)s, %(Value)s,  %(DeviceID)s, %(DayIndx)s, %(IsWorking)s)"
     def __init__(self, connectionString: ConnectionString) -> None:
         self._connectionString: ConnectionString = connectionString
         self._logger = logging.getLogger(__name__)
@@ -62,33 +80,43 @@ class DatabaseContext:
             cursor = cnx.cursor(dictionary=True)
             cursor.execute(DatabaseContext.QueryGetSettings)
             row = cursor.fetchone()
+              
             if row == None or cursor.rowcount <= 0 and defaultSettings!= NotImplemented:
                 params = defaultSettings.toDictionary()
                 cursor.execute(DatabaseContext.QueryInsertSettings, params)
                 cnx.commit()
                 cursor.execute(DatabaseContext.QueryGetSettings)
                 self._initialSettings.update(defaultSettings)
-                
-            if row!=None and isinstance(row, dict):
+            cursor.close()  
+            if row != None and isinstance(row, dict):
                 self._initialSettings.update(row)
-            cursor.close()
+                return self._initialSettings
         except Exception as e:
             self._logger.critical(e, exc_info=True)
             raise e
         finally:
             cnx.close()
-            return self._initialSettings
-
-    def createSettings(self, settings: Settings) -> bool:
+        return None
+    
+    def updateSettings(self, settings:Settings) -> None:
+        self.__execute(DatabaseContext.QueryUpdateSettings, settings)        
+    
+    def createSettings(self, settings: Settings) :
+        self.__execute(DatabaseContext.QueryInsertSettings, settings)        
+        
+    def __execute(self, query:str, settings:Settings)->None:
         try:
             cnx = mysql.connector.connect(user=self._connectionString.User,
                                           password=self._connectionString.Password,
                                           host=self._connectionString.Host,
                                           database=self._connectionString.Database)
             cursor = cnx.cursor()
-            cursor.execute(DatabaseContext.QueryInsertSettings, settings.toDictionary())
+            cursor.execute( query, settings.toDictionary())
             cnx.commit()
             cursor.close()
+        except Exception as e:
+            self._logger.critical(e, exc_info=True)
+            raise e
         finally:
             cnx.close()
 
@@ -135,3 +163,21 @@ class DatabaseContext:
             cnx.close()
 
         return result
+
+    def storeDataPoints(self, points:list)->None:
+        try:
+            cnx = mysql.connector.connect(user=self._connectionString.User,
+                                          password=self._connectionString.Password,
+                                          host=self._connectionString.Host,
+                                          database=self._connectionString.Database)
+            rows = [ {"EventTimeStamp": point.EventTimeStamp, "Value": point.Value, "DeviceID": point.DeviceID, "DayIndx": int(point.EventTimeStamp.year)*10000 +  int(point.EventTimeStamp.month)*100 + point.EventTimeStamp.day, "IsWorking": point.IsWorking} for point in points]
+            
+            cursor = cnx.cursor()
+            cursor.executemany(DatabaseContext.QueryInsertPoint, rows)
+            cnx.commit()
+            cursor.close()
+        except Exception as e:
+            self._logger.critical(e, exc_info=True)
+            raise e
+        finally:
+            cnx.close()

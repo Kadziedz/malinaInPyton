@@ -37,7 +37,7 @@ class MeasurementFilter(IMeasurementFilter):
             self.removeOldMeasurements(key)
             if not key in self._measurements or len(self._measurements[key]) <= 0:
                 return None
-            return sum([point.value for point in self._measurements[key]])/len(self._measurements)
+            return sum([point.value for point in self._measurements[key]])/len(self._measurements[key])
 
     def removeOldMeasurements(self, key: str):
         now = datetime.now()
