@@ -16,5 +16,8 @@ class Thermometer(Serializable):
 
     def copy(self):
         return Thermometer(self.Name, self.Temperature)
+    
+    def __eq__(self, __value: object) -> bool:
+        return self.Name == __value.Name and self.Temperature == __value.Temperature
 
           

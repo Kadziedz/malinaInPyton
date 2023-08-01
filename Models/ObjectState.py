@@ -14,6 +14,25 @@ class ObjectState(Serializable):
         self.IsAutoMode = False
         self.Device = list()
 
+    def __ne__(self, __value: object) -> bool:
+        return self.LowerSensorTemp != __value.LowerSensorTemp or \
+        self.HigherSensorTemp != __value.HigherSensorTemp or \
+        self.AmbientSensorTemp != __value.AmbientSensorTemp or \
+        self.LowerTempSensor != __value.LowerTempSensor or \
+        self.AmbientTempSensor != __value.AmbientTempSensor or \
+        self.HigherTempSensor != __value.HigherTempSensor or \
+        self.IsRelayOn != __value.IsRelayOn or \
+        self.IsAutoMode != __value.IsAutoMode or\
+        not self.__isDevicesEqual(__value)
+        
+    def __isDevicesEqual(self, __value: object)->bool:
+        if len(self.Device) != len(__value.Device) :
+            return False
+        for item in self.Device:
+            if not item in __value.Device:
+                return False
+        return True
+    
     def toDictionary(self):
         document = dict()
         document["LowerSensorTemp"] = self.LowerSensorTemp
@@ -23,6 +42,7 @@ class ObjectState(Serializable):
         document["AmbientTempSensor"] = self.AmbientTempSensor
         document["HigherTempSensor"] = self.HigherTempSensor
         document["IsAutoMode"] = self.IsAutoMode
+        document["IsRelayOn"] = self.IsRelayOn
         document["Device"] = [item.toDictionary() for item in self.Device]
 
         return document
@@ -36,6 +56,7 @@ class ObjectState(Serializable):
             self.AmbientTempSensor = src.AmbientTempSensor
             self.HigherTempSensor = src.HigherTempSensor
             self.IsAutoMode = src.IsAutoMode
+            self.IsRelayOn = src.IsRelayOn
             self.Device = [item.copy() for item in src.Device]
         elif isinstance(src, dict):
             self.LowerSensorTemp: float = src["LowerSensorTemp"]
@@ -45,6 +66,7 @@ class ObjectState(Serializable):
             self.AmbientTempSensor: str = src["AmbientTempSensor"]
             self.HigherTempSensor: str = src["HigherTempSensor"]
             self.IsAutoMode: bool = bool(src["IsAutoMode"])
+            self.IsRelayOn: bool = bool(src["IsRelayOn"])
             self.Device: list = [Thermometer(item["Name"], item["Temperature"]) for item in src["Device"]]
         self.LowerSensorTemp = -999 if self.LowerSensorTemp ==None else src.LowerSensorTemp
         self.HigherSensorTemp = -999 if self.HigherSensorTemp ==None else  src.HigherSensorTemp

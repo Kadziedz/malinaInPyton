@@ -17,6 +17,7 @@ from Services.MeasurementFilter import MeasurementFilter
 from Services.MessageBus import MessageBus
 from Models.Measurements import Measurements
 from Services.SimpleIoc import SimpleIoC
+from concurrent.futures import ThreadPoolExecutor
 
 class AutomationController(Thread):
     LED_RED:str="RedLED"
@@ -27,6 +28,7 @@ class AutomationController(Thread):
     
     def __init__(self, ioc:SimpleIoC) -> None:
         super().__init__()
+        self._executor = ThreadPoolExecutor(1)
         self._databaseContext:DatabaseContext = ioc.getInstance(DatabaseContext)
         self._messageBus: IMessageBus = ioc.getInstance(IMessageBus)
         self._meters:dict = ioc.getInstance("thermometers")
@@ -95,7 +97,7 @@ class AutomationController(Thread):
         workStart:datetime= actualTime
         workStop:datetime= actualTime
         lasControlTime:datetime = actualTime
-        
+        future = None
         relay.set(self._isRun)
         if self._isAutoMode:
             ledAutoMode.set(True)
@@ -104,6 +106,7 @@ class AutomationController(Thread):
             ledAutoMode.set(False)
             ledManualMode.set(True)
         relay.set(self._isRun)
+        ledPumpActive.set(self._isRun)
         
         while not self.isStopRequested():
 
@@ -116,24 +119,31 @@ class AutomationController(Thread):
                 localStatus.update(self._actualState)
                 locCmdRun = self._cmdRun
                 locCmdAuto= self._cmdAuto
-
+            
             #read temperatures
-            if delta.total_seconds() >= min([4, (localSettings.DataSaveInterval >> 1)]) :
+            if delta.total_seconds() >= min([4, (localSettings.DataSaveInterval >> 1)]) and future == None :
+                #self._logger.warning(f"\nAUTO: {ledAutoMode.get()}\tMAN: {ledManualMode.get()}\trelay: {relay.get()}\tled: {ledPumpActive.get()}\n")
                 lastIteration = actualTime
                 measurements.clear()
-                ledBlinker.set(True)
-                AutomationController.__measureTemperatures(localStatus, self._meters, self._filter, measurements, localSettings, self._logger)
-                ledBlinker.set(False)
-                with self._lock:
-                    self._actualState.update(localStatus)
-                self._messageBus.updateStatus(localStatus)
+                future = self._executor.submit(AutomationController.__dirtyTemperaturesRead, (self._meters))
+                
+            if future != None and future.done():
+                localMeasurements:dict = future.result()
+                localMeasurements = AutomationController.__filterTemperaturesAndAddOffsets(localMeasurements, self._filter, localSettings, self._logger)
+                measurements.update(localMeasurements)
+                AutomationController.__updateLocalStatusTemperatures(measurements, localStatus, self._logger)
+                future = None
+                #with self._lock:
+                #    self._actualState.update(localStatus)
+                #self._messageBus.updateStatus(localStatus)
 
-                delta = actualTime - lastDbWrite
-                if delta.total_seconds()> localSettings.DataSaveInterval and  len(measurements)>0 :
-                    lastDbWrite = actualTime
-                    #update if required 
-                    self._messageBus.sendEvent(Measurements(measurements, self._isRun, actualTime))
-                    self._logger.info(f"store to db requested {str(measurements)}")
+            delta = actualTime - lastDbWrite
+            if delta.total_seconds()> localSettings.DataSaveInterval and  len(measurements)>0 :
+                lastDbWrite = actualTime
+                #update if required 
+                self._messageBus.sendEvent(Measurements(measurements, self._isRun, actualTime))
+                self._logger.info(f"store to db requested {str(measurements)}")
+                measurements.clear()
                     
             # delta:datetime.timedelta =  actualTime - lastBlink
             # # toggle diode on board
@@ -174,7 +184,10 @@ class AutomationController(Thread):
                     ledManualMode.set(True)
                     ledAutoMode.set(False)
                 localSettings.IsAuto = locCmdAuto
+                localStatus.IsAutoMode = self._isAutoMode
+                localStatus.IsRelayOn = self._isRun
                 self._messageBus.updateSettings(localSettings)
+                
             # start/stop pump
             if locCmdRun != self._isRun :
                 self._isRun= locCmdRun
@@ -185,32 +198,49 @@ class AutomationController(Thread):
                 else:
                     workStop= actualTime
                 self._messageBus.sendEvent(Measurements(measurements, self._isRun, actualTime))
+            
+            with self._lock:
+                if self._actualState != localStatus:
+                    self._actualState.update(localStatus)
+                    self._messageBus.updateStatus(localStatus)
                 
             time.sleep(0.3)
-
+            
     @staticmethod
-    def __measureTemperatures(localStatus:ObjectState, devices:dict, filter:IMeasurementFilter, measurements:dict, localSettings:Settings, logger:logging)->ObjectState:
-        thermometers:dict = {device.Name: device for device in localStatus.Device }
-
+    def __dirtyTemperaturesRead(devices:dict)->dict:
+        measurements:dict = defaultdict()
         for label in devices:
             sensor:ISensor = devices[label]
             temperature:float = sensor.measure()
-            temperature = AutomationController.__addOffsets(temperature, label, localSettings)
-            filteredTemp:float =-999
+            measurements[label] = temperature
+        return measurements
+    
+    @staticmethod 
+    def __filterTemperaturesAndAddOffsets(measurements:dict, filter:IMeasurementFilter, localSettings:Settings, logger:logging)->dict:
+        for label in measurements:
+            temperature:float = measurements[label]
+            filteredTemp:float = 999
             if temperature == None:
                 logger.warning(f"failed to get temperature for {label}")
-                temperature = -999
             else:
+                temperature = AutomationController.__addOffsets(temperature, label, localSettings)
                 filter.updateMeasurements(label, temperature, localSettings.MeasurementSamplesCount)
-                filteredTemp:float = filter.Get(label)
-            logger.debug(f"filtered temperature [{label}] = {filteredTemp}")
-            if filteredTemp != 999 :
-                measurements[label] = filteredTemp
-
-            if label in thermometers:
-                thermometers[label].Temperature = filteredTemp
-            else:
-                localStatus.Device.append(Thermometer(label, filteredTemp))
+                filteredTemp = filter.Get(label)
+                logger.debug(f"filtered temperature [{label}] = {filteredTemp}")
+            measurements[label] = filteredTemp
+                
+        return measurements
+     
+    @staticmethod 
+    def __updateLocalStatusTemperatures(measurements:dict, localStatus:ObjectState,logger:logging)->ObjectState:
+        thermometers:dict = {device.Name: device for device in localStatus.Device }
+        for label in measurements:
+            filteredTemp:float = measurements[label]
+            if filteredTemp != 999 and filteredTemp!= None:
+                if label in thermometers:
+                    thermometers[label].Temperature = filteredTemp
+                else:
+                    localStatus.Device.append(Thermometer(label, filteredTemp))
         if localStatus.AmbientTempSensor in thermometers:
             localStatus.AmbientSensorTemp = thermometers[localStatus.AmbientTempSensor].Temperature
             logger.info(f"Ambient temperature sensor [{localStatus.AmbientTempSensor}] = {localStatus.AmbientSensorTemp}")
@@ -222,7 +252,7 @@ class AutomationController(Thread):
             logger.info(f"Low temperature sensor [{localStatus.LowerTempSensor}] = {localStatus.LowerSensorTemp }")
 
         return localStatus
-
+                
     @staticmethod
     def __addOffsets(value:float, deviceName:str,  config:Settings)->None:
         if value == None:

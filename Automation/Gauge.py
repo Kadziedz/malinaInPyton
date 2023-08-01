@@ -1,6 +1,7 @@
 import logging
 from datetime import datetime
 from Interfaces.ISensor import ISensor
+import time
 
 class Gauge(ISensor):
 
@@ -21,4 +22,5 @@ class Gauge(ISensor):
     def _read(self, sensorName:str) -> float:
         value = 19.0 + (datetime.now().microsecond % 10000) / 1000000.0
         self._logger.debug(f"temp[{sensorName}] = {value}")
+        time.sleep(1.3)
         return value

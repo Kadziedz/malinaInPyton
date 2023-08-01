@@ -18,8 +18,10 @@ class Event(object):
         return self
 
     def __call__(self, *args, **keywargs):
+        result = None
         for eventHandler in self.__eventHandlers:
-            eventHandler(*args, **keywargs)
+            result = eventHandler(*args, **keywargs)
+        return result
 
 class MessageBus(IMessageBus):
     
@@ -50,10 +52,10 @@ class MessageBus(IMessageBus):
         self._events[eventType] -= handler
         return True
 
-    def __onEvent(self, eventType: str, eventArg) -> None:
+    def __onEvent(self, eventType: str, eventArg):
         if isinstance(eventType, str) and eventType in self._events:
             with self._lock:
-                self._events[eventType](eventArg)
+                return self._events[eventType](eventArg)
         else:
             self._logger.critical(f"dropping unknown event type {eventType}")
              
