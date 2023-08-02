@@ -98,6 +98,9 @@ class DatabaseContext:
             cnx.close()
         return None
     
+    def getPoints(self, dayIndx:int, deviceId:int, maxTateTime:int)->list:
+        pass
+    
     def updateSettings(self, settings:Settings) -> None:
         self.__execute(DatabaseContext.QueryUpdateSettings, settings)        
     
@@ -148,7 +151,24 @@ class DatabaseContext:
             cursor.close()
         finally:
             cnx.close()
-            
+           
+    def getPointsQuantity(self, dayIndx:int, deviceId:int)->int:
+        try:
+            cnx = mysql.connector.connect(user=self._connectionString.User,
+                                          password=self._connectionString.Password,
+                                          host=self._connectionString.Host,
+                                          database=self._connectionString.Database)
+            cursor = cnx.cursor(dictionary=False)
+            cursor.execute("SELECt count(*) FROM DataPoints WHERE DeviceID=%(deviceID)s and DayIndx= %(dayIndx)s and `IsWorking`=1", {"deviceID":dayIndx, "deviceID": deviceId})
+            row = cursor.fetchone()
+            cursor.close()
+            return row[0]
+        except Exception as e:
+            self._logger.critical(e, exc_info=True)
+            raise e
+        finally:
+            cnx.close()
+     
     def synchronizeDevices(self, physicalDeviceNamesList:list) -> dict:
         result = defaultdict()
         try:

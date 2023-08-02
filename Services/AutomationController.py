@@ -41,10 +41,11 @@ class AutomationController(Thread):
         self._cmdRun:bool= False
         self._isRun = False
         self._isAutoMode = False
-        self._actualState:ObjectState = AutomationController.__initializeDataStructures(self._actualSettings, [key for key in self._meters], self._messageBus, self._databaseContext)
+        self._actualState:ObjectState
+        self._devices: dict
+        (self._devices, self._actualState) = AutomationController.__initializeDataStructures(self._actualSettings, [key for key in self._meters], self._messageBus, self._databaseContext)
         self._messageBus.updateStatus(self._actualState)
         self._logger:logging= logging.getLogger(__name__)
-        
         self._messageBus.register(MessageBus.EVENT_NEW_COMMAND, self.onNewCommandReceived)
         self._messageBus.register(MessageBus.EVENT_SETTINGS_UPDATE, self.onNewSettings)
         # messageBusSingleton.register(MessageBus.EVENT_NEW_STATUS, self.onNewStatus)
@@ -54,14 +55,14 @@ class AutomationController(Thread):
             self._messageBus.unregister(MessageBus.EVENT_SETTINGS_UPDATE, self.onNewSettings)
     
     @staticmethod
-    def __initializeDataStructures(config:Settings, physicalDeviceNamesList:list, sb:IMessageBus, db:DatabaseContext)->ObjectState:
+    def __initializeDataStructures(config:Settings, physicalDeviceNamesList:list, sb:IMessageBus, db:DatabaseContext)->tuple:
         locState=sb.getStatus()
         devices = db.synchronizeDevices(physicalDeviceNamesList)
         locState.Device = [Thermometer(devices[key].Name, None) for key in devices]
         locState.AmbientSensorTemp = None
         locState.LowerSensorTemp = None
         locState.HigherSensorTemp = None
-        return AutomationController.__updateState(config, locState)
+        return (devices, AutomationController.__updateState(config, locState))
 
     @staticmethod
     def __updateState(config:Settings, status:ObjectState) ->ObjectState:
@@ -92,8 +93,6 @@ class AutomationController(Thread):
         ledManualMode:IRelay = self._coils[AutomationController.LED_YELLOW]
         ledAutoMode:IRelay = self._coils[AutomationController.LED_GREEN]
         relay:IRelay= self._coils[AutomationController.RELAY]
-        # lastBlink:datetime= actualTime
-        # flipFlop:bool=False
         workStart:datetime= actualTime
         workStop:datetime= actualTime
         lasControlTime:datetime = actualTime
@@ -143,25 +142,39 @@ class AutomationController(Thread):
                 ( delta.total_seconds()> localSettings.DataSaveInterval * 5 and (actualTime.hour < localSettings.DayStart or actualTime.hour> localSettings.DayStop)):
                 oldDayIndx = self.__storeDataPoints(oldDayIndx, actualTime, measurements.copy())
                 lastDbWrite = actualTime
-                    
-            # delta:datetime.timedelta =  actualTime - lastBlink
-            # # toggle diode on board
-            # if delta.total_seconds()>0.5:
-            #     flipFlop= not flipFlop
-            #     lastBlink= actualTime
-            #     ledBlinker.set(flipFlop)
               
             #automatic control iteration
             delta= actualTime - lasControlTime
-            if self._isAutoMode and(delta.total_seconds() >= localSettings.ControlInterval and (actualTime.hour >= localSettings.DayStart and actualTime.hour <= localSettings.DayStop)):
+            if self._isAutoMode and delta.total_seconds() >= localSettings.ControlInterval and actualTime.hour >= localSettings.DayStart and actualTime.hour <= localSettings.DayStop:
                 #TO DO 
                 lasControlTime = actualTime
                 lowerTemp = self._filter.Get(localSettings.LowerTempSensor)
                 higherTemp = self._filter.Get(localSettings.HigherTempSensor)
                 ambientTemp = self._filter.Get(localSettings.AmbientTempSensor)
                 
+                if self._isRun:
+                    activityTime:datetime.timedelta = actualTime  - workStart
+                    if activityTime.total_seconds() > localSettings.DecisionDelay * 60 and lowerTemp + localSettings.MinimumTempDiff > higherTemp:
+                        self._logger.warning(f"{lowerTemp} + {localSettings.MinimumTempDiff} > {higherTemp} temperature too low, decision: turn off")
+                        locCmdRun = False 
+                        
                 maxInactivityTime = localSettings.MaxStateTime
-                pass
+                avgT:float = 0
+                
+                if localSettings.HigherTempSensor in self._devices and localSettings.LowerTempSensor in self._devices:
+                    dayIndx:int = actualTime.year * 10000 + actualTime.month * 100 + actualTime.day
+                    idHigher:int = self._devices[localSettings.HigherTempSensor]
+                    idLower:int = self._devices[localSettings.LowerTempSensor]
+                    samplesCount:int = self._databaseContext.getPointsQuantity(dayIndx, idHigher)
+                    if samplesCount>0:
+                        pts1:int = self._databaseContext.getPoints(dayIndx, idHigher, localSettings.MaxStateTime * 2)
+                        pts2:int = self._databaseContext.getPoints(dayIndx, idLower, localSettings.MaxStateTime * 2)
+                        pass
+                    
+                    
+                    #TODO
+                    
+                    
             
             # ignore command, out of working hours in auto mode 
             if (self._isRun or locCmdRun) and (self._isAutoMode or locCmdAuto) and (actualTime.hour < localSettings.DayStart or actualTime.hour> localSettings.DayStop):
