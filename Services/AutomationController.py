@@ -107,6 +107,7 @@ class AutomationController(Thread):
             ledManualMode.set(True)
         relay.set(self._isRun)
         ledPumpActive.set(self._isRun)
+        oldDayIndx:int=0
         
         while not self.isStopRequested():
 
@@ -120,30 +121,28 @@ class AutomationController(Thread):
                 locCmdRun = self._cmdRun
                 locCmdAuto= self._cmdAuto
             
-            #read temperatures
+            #read temperatures in paralel
             if delta.total_seconds() >= min([4, (localSettings.DataSaveInterval >> 1)]) and future == None :
-                #self._logger.warning(f"\nAUTO: {ledAutoMode.get()}\tMAN: {ledManualMode.get()}\trelay: {relay.get()}\tled: {ledPumpActive.get()}\n")
+                self._logger.warning(f"\nAUTO: {ledAutoMode.get()}\tMAN: {ledManualMode.get()}\trelay: {relay.get()}\tled: {ledPumpActive.get()}\n")
                 lastIteration = actualTime
-                measurements.clear()
+                ledBlinker.set(True)
                 future = self._executor.submit(AutomationController.__dirtyTemperaturesRead, (self._meters))
                 
+            #consume new temperatures
             if future != None and future.done():
-                localMeasurements:dict = future.result()
-                localMeasurements = AutomationController.__filterTemperaturesAndAddOffsets(localMeasurements, self._filter, localSettings, self._logger)
-                measurements.update(localMeasurements)
-                AutomationController.__updateLocalStatusTemperatures(measurements, localStatus, self._logger)
-                future = None
-                #with self._lock:
-                #    self._actualState.update(localStatus)
-                #self._messageBus.updateStatus(localStatus)
-
-            delta = actualTime - lastDbWrite
-            if delta.total_seconds()> localSettings.DataSaveInterval and  len(measurements)>0 :
-                lastDbWrite = actualTime
-                #update if required 
-                self._messageBus.sendEvent(Measurements(measurements, self._isRun, actualTime))
-                self._logger.info(f"store to db requested {str(measurements)}")
                 measurements.clear()
+                measurements.update(self._consumeMeasurements(future.result(), localStatus, localSettings))
+                ledBlinker.set(False)
+                future = None
+                    
+            #store measurements in the database
+            delta = actualTime - lastDbWrite
+            if  len(measurements)>0  and \
+                ( delta.total_seconds()> localSettings.DataSaveInterval and actualTime.hour >= localSettings.DayStart and actualTime.hour<= localSettings.DayStop) \
+                or \
+                ( delta.total_seconds()> localSettings.DataSaveInterval * 5 and (actualTime.hour < localSettings.DayStart or actualTime.hour> localSettings.DayStop)):
+                oldDayIndx = self.__storeDataPoints(oldDayIndx, actualTime, measurements.copy())
+                lastDbWrite = actualTime
                     
             # delta:datetime.timedelta =  actualTime - lastBlink
             # # toggle diode on board
@@ -164,12 +163,11 @@ class AutomationController(Thread):
                 maxInactivityTime = localSettings.MaxStateTime
                 pass
             
-            # ignore command, out of working hours
+            # ignore command, out of working hours in auto mode 
             if (self._isRun or locCmdRun) and (self._isAutoMode or locCmdAuto) and (actualTime.hour < localSettings.DayStart or actualTime.hour> localSettings.DayStop):
-                # locCmdRun= False
-                # with self._lock:
-                #     self._cmdRun = False
-                pass
+                locCmdRun= False
+                with self._lock:
+                     self._cmdRun = False
             
             #act
             # change work mode
@@ -192,20 +190,40 @@ class AutomationController(Thread):
             if locCmdRun != self._isRun :
                 self._isRun= locCmdRun
                 relay.set(self._isRun)
-                ledPumpActive.set(self._isRun)
                 if self._isRun :
                     workStart= actualTime
                 else:
                     workStop= actualTime
+                localStatus.IsRelayOn = locCmdRun
                 self._messageBus.sendEvent(Measurements(measurements, self._isRun, actualTime))
-            
+                ledPumpActive.set(self._isRun)
+                
             with self._lock:
                 if self._actualState != localStatus:
                     self._actualState.update(localStatus)
                     self._messageBus.updateStatus(localStatus)
                 
             time.sleep(0.3)
-            
+    
+    def _consumeMeasurements(self, localMeasurements:dict, localStatus:ObjectState, localSettings:Settings)->dict:
+        localMeasurements = AutomationController.__filterTemperaturesAndAddOffsets(localMeasurements, self._filter, localSettings, self._logger)
+        AutomationController.__updateLocalStatusTemperatures(localMeasurements, localStatus, self._logger)
+        with self._lock:
+            self._actualState.update(localStatus)
+        self._messageBus.updateStatus(localStatus)
+        return localMeasurements
+        
+    def __storeDataPoints(self, oldDayIndx:int, actualTime:datetime.datetime, measurements:dict)->int:
+        self._messageBus.sendEvent(Measurements(measurements.copy(), self._isRun, actualTime))
+        self._logger.info(f"store to db requested {str(measurements)}")
+        twoDaysPast:datetime.datetime = actualTime - datetime.timedelta(days=2)
+        dayIndx = twoDaysPast.year * 10000 + twoDaysPast.month * 100 + twoDaysPast.day
+        if oldDayIndx!= dayIndx:
+            oldDayIndx = dayIndx
+            self._logger.info(f"delete old data request")
+            self._messageBus.sendNamedEvent(MessageBus.EVENT_DELETE_OLD_DATA, oldDayIndx)
+        return oldDayIndx
+
     @staticmethod
     def __dirtyTemperaturesRead(devices:dict)->dict:
         measurements:dict = defaultdict()

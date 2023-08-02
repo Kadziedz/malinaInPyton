@@ -136,6 +136,19 @@ class DatabaseContext:
 
         return result
 
+    def deleteOldMeasurements(self, dayIndex:int)->None:
+        try:
+            cnx = mysql.connector.connect(user=self._connectionString.User,
+                                          password=self._connectionString.Password,
+                                          host=self._connectionString.Host,
+                                          database=self._connectionString.Database)
+            cursor = cnx.cursor()
+            cursor.execute("delete from DataPoints where DayIndx <=  %(DayIndx)s", {"DayIndx": dayIndex})
+            cnx.commit()
+            cursor.close()
+        finally:
+            cnx.close()
+            
     def synchronizeDevices(self, physicalDeviceNamesList:list) -> dict:
         result = defaultdict()
         try:

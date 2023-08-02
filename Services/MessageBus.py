@@ -28,7 +28,7 @@ class MessageBus(IMessageBus):
     EVENT_SETTINGS_UPDATE: str = "onSettingsUpdate"
     EVENT_NEW_COMMAND: str = "onNewCommand"
     EVENT_NEW_STATUS: str = "onNewStatus"
-
+    EVENT_DELETE_OLD_DATA: str = "onDeleteOldData"
     def __init__(self) -> None:
         super().__init__()
         self._logger = logging.getLogger(__name__)
@@ -94,5 +94,8 @@ class MessageBus(IMessageBus):
     
     def sendEvent(self, eventArg:object)->None:
         eventType:str = str(type(eventArg))
+        self.__onEvent(eventType, eventArg)
+        
+    def sendNamedEvent(self, eventType:str, eventArg:object)->None:
         self.__onEvent(eventType, eventArg)
 

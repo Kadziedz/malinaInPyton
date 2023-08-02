@@ -37,3 +37,7 @@ class IMessageBus(ABC):
     @abstractmethod
     def sendEvent(self, eventArg:object)->None:
         pass
+    
+    @abstractmethod
+    def sendNamedEvent(self, eventType:str, eventArg:object)->None:
+        pass

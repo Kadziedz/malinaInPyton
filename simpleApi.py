@@ -18,6 +18,7 @@ from Startup import Startup
 # https://towardsdatascience.com/the-right-way-to-build-an-api-with-python-cd08ab285f8f
 # https://able.bio/rhett/how-to-set-and-get-environment-variables-in-python--274rgt5
 # https://www.loggly.com/ultimate-guide/python-logging-basics/
+# https://www.tutorialspoint.com/concurrency_in_python/concurrency_in_python_pool_of_threads.htm
 cfg= Config()
 
 handler = logging.StreamHandler()

@@ -12,7 +12,7 @@ from Services.SimpleIoc import SimpleIoC
 
 class DataWriter(object):
     def __init__(self, ioc:SimpleIoC) -> None:
-        self._databaseContext = ioc.getInstance(DatabaseContext)
+        self._databaseContext:DatabaseContext = ioc.getInstance(DatabaseContext)
         self._messageBus = ioc.getInstance(IMessageBus)
         rawData = self._databaseContext.getDevices()
         self._devicesByName = {item.Name:item for item in rawData }
@@ -23,16 +23,28 @@ class DataWriter(object):
         self._lock: Lock = Lock()
         self._messageBus.register(self.__eventType, self.onStoreData)
         self._messageBus.register(MessageBus.EVENT_SETTINGS_UPDATE, self.onNewSettings)
-
+        self._messageBus.register(MessageBus.EVENT_DELETE_OLD_DATA, self.onDeleteOldData)
+    
     def __del__(self):
         self._messageBus.unregister(self.__eventType, self.onStoreData)
         self._messageBus.unregister(MessageBus.EVENT_SETTINGS_UPDATE, self.onNewSettings)
+        self._messageBus.unregister(MessageBus.EVENT_DELETE_OLD_DATA, self.onDeleteOldData)
+
 
     def onStoreData(self, measurements:Measurements)->None:
             Thread(target=self.__storeMeasurements, kwargs={'measurements':measurements}).start()
 
-    def onNewSettings(self, measurements:Settings)->None:
-            Thread(target=self.__storeSettings, kwargs={'newSettings':measurements}).start()
+    def onNewSettings(self, settings:Settings)->None:
+            Thread(target=self.__storeSettings, kwargs={'newSettings':settings}).start()
+
+    def onDeleteOldData(self, dayIndex:int)->None:
+            Thread(target=self.__deleteOldData, kwargs={'dayIndex':dayIndex}).start()
+
+    def __deleteOldData(self, dayIndex: int) -> None:
+        with self._lock:
+            self._logger.info(f"removing data points older than {dayIndex}")
+            self._databaseContext.deleteOldMeasurements(dayIndex)
+
 
     def __storeSettings(self, newSettings: Settings) -> None:
         with self._lock:
