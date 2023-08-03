@@ -18,7 +18,7 @@ from Services.SimpleIoc import SimpleIoC
 class SocketServer(Thread):
     EVENT_NEW_SOCKET_MESSAGE:str= "onNewSocketMessage"
     
-    def __init__(self, ioc:SimpleIoC, port:int=8351, ip:str="127.0.0.1") -> None:
+    def __init__(self, ioc:SimpleIoC, ip:str="127.0.0.1", port:int=8351) -> None:
         super().__init__()
         self._logger = logging.getLogger(__class__.__name__)
         self._lock: Lock = Lock()
@@ -30,17 +30,16 @@ class SocketServer(Thread):
          
     def handler(self, websocket:ServerConnection):
         clientID = str(websocket.id)
+        clientIP = str(websocket.remote_address)
         with self._lock:
             self._clients[clientID]= websocket
-        self._logger.info(f"handling connection from {websocket.remote_address}")
+        self._logger.info(f"handling connection from {clientIP} is started")
         try:
             while not self.isTerminateRequested():
                 try:
                     message = websocket.recv()
                     rawJson = json.loads(message)
-                    self._logger.warn(f"message received from {websocket.remote_address}: {rawJson}")
-                    response = self._messageBus.getStatus().toJson()
-                    self.sendMessage(response)
+                    self._logger.warn(f"message received from {clientIP}: {rawJson}")
                     self._messageBus.sendNamedEvent(SocketServer.EVENT_NEW_SOCKET_MESSAGE, rawJson)
                 except websockets.ConnectionClosedOK:
                     break
@@ -49,6 +48,7 @@ class SocketServer(Thread):
         finally:
             with self._lock:
                 self._clients.pop(clientID)
+        self._logger.info(f"connection from {clientIP} is closed")
     
     def __del__(self):
         self.__disposeAsyncLoop()
@@ -61,7 +61,7 @@ class SocketServer(Thread):
         return result
     
     def sendMessage(self, message:dict)->None:
-        self._logger.info(f"sending message to the  {len(self._clients)} clients {message}")
+       # self._logger.info(f"sending message to the  {len(self._clients)} clients {message}")
         with self._lock :
             for key in self._clients:
                 connection:ServerConnection = self._clients[key]
@@ -80,7 +80,7 @@ class SocketServer(Thread):
     
     def __disposeAsyncLoop(self)->None:
         self._socketServer.shutdown()
-        self._logger.info("websocket server loop is closed")
+        self._logger.info("websocket server loop is stopped")
     
     def run(self) -> None:
         self._socketServer.serve_forever()

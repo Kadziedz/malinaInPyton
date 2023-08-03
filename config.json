@@ -17,14 +17,15 @@
     "HigherTempSensorOffset": 0,
     "AmbientTempSensorOffset": 0
   },
-  "LED": {
-    "RedLED":5,
-    "GreenLED":3,
-    "YellowLED":2,
-    "BlinkingLED":7,
-    "Relay":6
-
+  "GPIO": {
+    "RedLED": 5,
+    "GreenLED": 3,
+    "YellowLED": 2,
+    "BlinkingLED": 7,
+    "Relay": 6
   },
+  "WebSocketServerHost": "127.0.0.1",
+  "WebSocketServerPort": 8123,
   "ConnectionStrings": {
     "ControlDB": {
       "User": "",

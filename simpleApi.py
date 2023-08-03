@@ -2,7 +2,6 @@ import logging
 import logging.handlers
 import os
 
-
 from flask import Flask
 from flask_restful import Api
 from Interfaces.IMessageBus import IMessageBus
@@ -11,9 +10,12 @@ from Controllers.SettingsController import SettingsController
 from Controllers.StatusController import StatusController
 from Helpers.OneLineExceptionFormatter import OneLineExceptionFormatter
 from Models.Config import Config
+from Models.ObjectState import ObjectState
 from Services.AutomationController import AutomationController
 from Services.DataWriter import DataWriter
 from Startup import Startup
+from SocketServer import SocketServer
+
 # https://www.imaginarycloud.com/blog/flask-python/
 # https://towardsdatascience.com/the-right-way-to-build-an-api-with-python-cd08ab285f8f
 # https://able.bio/rhett/how-to-set-and-get-environment-variables-in-python--274rgt5
@@ -32,6 +34,18 @@ logging.basicConfig(level=os.environ.get("LOGLEVEL", cfg.LogLevel))
 ioc = Startup(cfg)
 plc = AutomationController(ioc)
 plc.start()
+socketServer = SocketServer(ioc, cfg.WebSocketServerHost, cfg.WebSocketServerPort)
+socketServer.start()
+mb: IMessageBus = ioc.getInstance(IMessageBus)
+
+def sendStatusNotification(status:ObjectState):
+    if isinstance(status, ObjectState):
+        socketServer.sendMessage(status.toDictionary())  
+    if isinstance(status, dict):
+        socketServer.sendMessage(status)  
+mb.register(AutomationController.EVENT_STATUS_UPDATE, sendStatusNotification )
+  
+
 writer = DataWriter(ioc)
 
 app = Flask(__name__)
@@ -45,7 +59,10 @@ api.add_resource(CommandsController, '/api/cmd/<string:command>',
 
 if __name__ == '__main__':
     app.run(debug=False, port=5000)  # run our Flask app
-
+    
+mb.unregister(AutomationController.EVENT_STATUS_UPDATE, sendStatusNotification)
 plc.requestStop()
 plc.join()
+socketServer.requestStop()
+socketServer.join()
 print("done")

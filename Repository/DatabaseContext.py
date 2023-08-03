@@ -93,7 +93,6 @@ class DatabaseContext:
                 return self._initialSettings
         except Exception as e:
             self._logger.critical(e, exc_info=True)
-            raise e
         finally:
             cnx.close()
         return None
@@ -159,7 +158,7 @@ class DatabaseContext:
                                           host=self._connectionString.Host,
                                           database=self._connectionString.Database)
             cursor = cnx.cursor(dictionary=False)
-            cursor.execute("SELECt count(*) FROM DataPoints WHERE DeviceID=%(deviceID)s and DayIndx= %(dayIndx)s and `IsWorking`=1", {"deviceID":dayIndx, "deviceID": deviceId})
+            cursor.execute("SELECT count(*) FROM DataPoints WHERE DeviceID=%(deviceID)s and DayIndx= %(dayIndx)s and IsWorking=1", {"dayIndx":dayIndx, "deviceID": deviceId})
             row = cursor.fetchone()
             cursor.close()
             return row[0]

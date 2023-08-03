@@ -38,6 +38,8 @@ class Config(Settings):
         self.ConnectionStrings: dict = {item:  ConnectionString(configDict["ConnectionStrings"][item]) for item in configDict["ConnectionStrings"]}
         self.LogLevel = configDict["Logging"]["LogLevel"]
         self.GPIO:dict = configDict["GPIO"]
+        self.WebSocketServerHost:str =  configDict["WebSocketServerHost"]
+        self.WebSocketServerPort:int =  int(configDict["WebSocketServerPort"])
 
     def getSettings(self) -> Settings:
         settings = Settings()

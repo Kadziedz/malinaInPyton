@@ -25,17 +25,16 @@ class Event(object):
 
 class MessageBus(IMessageBus):
     
-    EVENT_SETTINGS_UPDATE: str = "onSettingsUpdate"
-    EVENT_NEW_COMMAND: str = "onNewCommand"
-    EVENT_NEW_STATUS: str = "onNewStatus"
-    EVENT_DELETE_OLD_DATA: str = "onDeleteOldData"
+    EVENT_SETTINGS_UPDATE: str = __name__ + ".onSettingsUpdate"
+    EVENT_NEW_COMMAND: str = __name__ +".onNewCommand"
+    EVENT_NEW_STATUS: str = __name__ +".onNewStatus"
+    EVENT_DELETE_OLD_DATA: str = __name__ +".onDeleteOldData"
     def __init__(self) -> None:
         super().__init__()
         self._logger = logging.getLogger(__name__)
         self._settings = Settings()
         self._status = ObjectState()
-        self._events = {MessageBus.EVENT_NEW_COMMAND: Event(
-        ), MessageBus.EVENT_NEW_STATUS: Event(), MessageBus.EVENT_SETTINGS_UPDATE: Event()}
+        self._events = {MessageBus.EVENT_NEW_COMMAND: Event(), MessageBus.EVENT_NEW_STATUS: Event(), MessageBus.EVENT_SETTINGS_UPDATE: Event()}
         self._lock = Lock()
         
     def register(self, eventType: str, handler) -> bool:

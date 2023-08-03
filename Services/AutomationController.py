@@ -25,6 +25,7 @@ class AutomationController(Thread):
     LED_YELLOW:str="YellowLED"
     LED_BLINKER:str="BlinkingLED"
     RELAY:str="Relay"
+    EVENT_STATUS_UPDATE= __name__ + ".onStatusUpdate"
     
     def __init__(self, ioc:SimpleIoC) -> None:
         super().__init__()
@@ -84,6 +85,7 @@ class AutomationController(Thread):
     def run(self) -> None:
         lastIteration:datetime.datetime = datetime.datetime.now()
         actualTime:datetime.datetime = datetime.datetime.now()
+        lastUpdateSent:datetime.datetime = datetime.datetime.now() 
         localSettings:Settings = Settings()
         localStatus:ObjectState= ObjectState()
         lastDbWrite:datetime.datetime = datetime.datetime.now()
@@ -119,13 +121,18 @@ class AutomationController(Thread):
                 localStatus.update(self._actualState)
                 locCmdRun = self._cmdRun
                 locCmdAuto= self._cmdAuto
-            
+                
             #read temperatures in paralel
             if delta.total_seconds() >= min([4, (localSettings.DataSaveInterval >> 1)]) and future == None :
                 self._logger.warning(f"\nAUTO: {ledAutoMode.get()}\tMAN: {ledManualMode.get()}\trelay: {relay.get()}\tled: {ledPumpActive.get()}\n")
                 lastIteration = actualTime
                 ledBlinker.set(True)
                 future = self._executor.submit(AutomationController.__dirtyTemperaturesRead, (self._meters))
+            
+            delta = actualTime - lastUpdateSent
+            if delta.total_seconds()>0.5:
+                lastUpdateSent = actualTime
+                self._messageBus.sendNamedEvent(AutomationController.EVENT_STATUS_UPDATE, localStatus.toDictionary())
                 
             #consume new temperatures
             if future != None and future.done():
@@ -163,8 +170,8 @@ class AutomationController(Thread):
                 
                 if localSettings.HigherTempSensor in self._devices and localSettings.LowerTempSensor in self._devices:
                     dayIndx:int = actualTime.year * 10000 + actualTime.month * 100 + actualTime.day
-                    idHigher:int = self._devices[localSettings.HigherTempSensor]
-                    idLower:int = self._devices[localSettings.LowerTempSensor]
+                    idHigher:int = self._devices[localSettings.HigherTempSensor].Id
+                    idLower:int = self._devices[localSettings.LowerTempSensor].Id
                     samplesCount:int = self._databaseContext.getPointsQuantity(dayIndx, idHigher)
                     if samplesCount>0:
                         pts1:int = self._databaseContext.getPoints(dayIndx, idHigher, localSettings.MaxStateTime * 2)
@@ -215,7 +222,6 @@ class AutomationController(Thread):
                 if self._actualState != localStatus:
                     self._actualState.update(localStatus)
                     self._messageBus.updateStatus(localStatus)
-                
             time.sleep(0.3)
     
     def _consumeMeasurements(self, localMeasurements:dict, localStatus:ObjectState, localSettings:Settings)->dict:
@@ -319,4 +325,5 @@ class AutomationController(Thread):
         with self._lock:
             self._actualSettings.update(newSettings)
             AutomationController.__updateState(self._actualSettings, self._actualState)
+            self._cmdAuto = self._actualSettings.IsAuto
         self._logger.info(f"settings update to {self._actualSettings.toJson()}")
