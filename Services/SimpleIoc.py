@@ -1,7 +1,8 @@
 from collections import defaultdict
+from Interfaces.IContainer import IContainer
 
 
-class SimpleIoC:
+class SimpleIoC(IContainer):
     def __init__(self) -> None:
         self.__registrations:dict= defaultdict()
 

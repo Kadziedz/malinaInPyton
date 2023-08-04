@@ -1,3 +1,5 @@
+from Interfaces.IActualDateProvider import IActualDateProvider
+from Interfaces.IContainer import IContainer
 from Interfaces.IMeasurementFilter import IMeasurementFilter
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -14,8 +16,9 @@ class Measurement:
 
 class MeasurementFilter(IMeasurementFilter):
 
-    def __init__(self) -> None:
+    def __init__(self, ioc:IContainer = None) -> None:
         super().__init__()
+        self._dateProvider:IActualDateProvider = ioc.getInstance(IActualDateProvider)
         self._logger = logging.getLogger(__name__)
         self._sync = Lock()
         self._measurements = defaultdict()
@@ -29,7 +32,7 @@ class MeasurementFilter(IMeasurementFilter):
             self._tailLen = tailLen
             self.removeOldMeasurements(key)
 
-            self._measurements[key].append(Measurement(datetime.now(), val))
+            self._measurements[key].append(Measurement(self._dateProvider.GetActualDate(), val))
 
     def Get(self, key: str) -> float:
 
