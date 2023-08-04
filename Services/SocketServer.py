@@ -41,6 +41,8 @@ class SocketServer(Thread):
                     self._messageBus.sendNamedEvent(SocketServer.EVENT_NEW_SOCKET_MESSAGE, rawJson)
                 except websockets.ConnectionClosedOK:
                     break
+                except websockets.ConnectionClosed:
+                    break
                 except Exception as e:
                     self._logger.error(e, exc_info=True)
         finally:
@@ -60,10 +62,14 @@ class SocketServer(Thread):
     
     def sendMessage(self, message:dict)->None:
        # self._logger.info(f"sending message to the  {len(self._clients)} clients {message}")
-        with self._lock :
-            for key in self._clients:
-                connection:ServerConnection = self._clients[key]
-                connection.send(json.dumps(message))
+        try:
+            with self._lock :
+                for key in self._clients:
+                    connection:ServerConnection = self._clients[key]
+                    connection.send(json.dumps(message))
+        except Exception as e:
+            self._logger.error(e, exc_info=True)
+                
 
     def requestStop(self)->None:
         self._logger.info("stop request...")

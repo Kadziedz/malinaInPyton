@@ -147,7 +147,7 @@ class AutomationController(Thread):
                 localMeasurements = AutomationController.__filterTemperaturesAndAddOffsets(future.result(), self._filter, localSettings, self._logger)
                 AutomationController.__updateLocalStatusTemperatures(localMeasurements, localStatus, self._logger)
                 measurements.update(localMeasurements)
-                self._logger.warn(str(measurements))
+                self._logger.info(str(measurements))
                 future = None
                     
             #store measurements in the database
@@ -212,8 +212,11 @@ class AutomationController(Thread):
             # ignore command, out of working hours in auto mode 
             if (self._isRun or locCmdRun) and (self._isAutoMode or locCmdAuto) and (actualTime.hour < localSettings.DayStart or actualTime.hour> localSettings.DayStop):
                 locCmdRun= False
-                with self._lock:
-                    self._cmdRun = False #revoke command if exists
+                
+            
+            with self._lock:
+                if self._isAutoMode :
+                    self._cmdRun = locCmdRun
             
             #act
             # change work mode
@@ -333,11 +336,13 @@ class AutomationController(Thread):
                 self._cmdAuto=False
                 return True
             elif capitalizedCommand == "ON":
-                self._cmdRun=True
-                return True
+                if not self._isAutoMode:
+                    self._cmdRun=True
+                    return True
             elif capitalizedCommand == "OFF":
-                self._cmdRun=False
-                return True
+                if not self._isAutoMode:
+                    self._cmdRun=False
+                    return True
         return False
 
     def onNewSettings(self, newSettings: Settings) -> None:

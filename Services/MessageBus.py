@@ -52,9 +52,10 @@ class MessageBus(IMessageBus):
         return True
 
     def __onEvent(self, eventType: str, eventArg):
-        if isinstance(eventType, str) and eventType in self._events:
+        if isinstance(eventType, str):
             with self._lock:
-                return self._events[eventType](eventArg)
+                if eventType in self._events:
+                    return self._events[eventType](eventArg)
         else:
             self._logger.critical(f"dropping unknown event type {eventType}")
              
