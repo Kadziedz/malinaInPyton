@@ -23,7 +23,7 @@ class SocketServer(Thread):
         self.__isTerminateRequested:bool = False
         self.__port = port
         self._messageBus:IMessageBus = ioc.getInstance(IMessageBus)
-        self._socketServer:WebSocketServer = websockets.sync.server.serve(self.handler, ip, self.__port) #websockets.serve(self.handler, ip, self.__port)
+        self._socketServer:WebSocketServer = websockets.sync.server.serve(self.handler, ip, self.__port )
         self._clients:dict = defaultdict()
          
     def handler(self, websocket:ServerConnection):

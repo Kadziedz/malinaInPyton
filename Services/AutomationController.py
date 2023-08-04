@@ -204,7 +204,7 @@ class AutomationController(Thread):
                     locCmdRun = True
                 
                 delta = actualTime - workStart    
-                if self._isRun and delta.total_seconds() > localSettings.MaxStateTime:
+                if self._isRun and delta.total_seconds() > localSettings.MaxStateTime * 60:
                     self._logger.warning("working too long, decision: turn off")
                     locCmdRun= False
             #end if self._isAutoMode and delta.total_seconds() >= localSettings.ControlInterval and actualTime.hour >= localSettings.DayStart and actualTime.hour <= localSettings.DayStop:         
