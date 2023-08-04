@@ -42,5 +42,8 @@ class MeasurementFilter(IMeasurementFilter):
     def removeOldMeasurements(self, key: str):
         now = datetime.now()
         nowMinus10 = now + timedelta(minutes=-10)
-        while key in self._measurements and len(self._measurements[key]) > 0 and self._measurements[key][-1].dateTime < nowMinus10:
-            self._measurements[key].popleft()
+        if key in self._measurements :
+            while len(self._measurements[key]) > 0 and self._measurements[key][-1].dateTime < nowMinus10:
+                self._measurements[key].popleft()
+            while len(self._measurements[key]) > self._tailLen:
+                self._measurements[key].popleft()
