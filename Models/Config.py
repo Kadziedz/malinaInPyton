@@ -40,6 +40,7 @@ class Config(Settings):
         self.GPIO:dict = configDict["GPIO"]
         self.WebSocketServerHost:str =  configDict["WebSocketServerHost"]
         self.WebSocketServerPort:int =  int(configDict["WebSocketServerPort"])
+        self.isPi:bool = configDict["WorkMode"].upper() =="PI"
 
     def getSettings(self) -> Settings:
         settings = Settings()

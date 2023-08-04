@@ -13,7 +13,8 @@ from Models.Config import Config
 from Models.ObjectState import ObjectState
 from Services.AutomationController import AutomationController
 from Services.DataWriter import DataWriter
-from Startup import Startup
+import Startup 
+
 from SocketServer import SocketServer
 
 # https://www.imaginarycloud.com/blog/flask-python/
@@ -31,7 +32,12 @@ root.setLevel(os.environ.get("LOGLEVEL", cfg.LogLevel))
 root.addHandler(handler)
 logging.basicConfig(level=os.environ.get("LOGLEVEL", cfg.LogLevel))
 
-ioc = Startup(cfg)
+if cfg.isPi:
+    import StartupPi
+    ioc = StartupPi.Startup(cfg)
+else:
+    ioc = Startup.Startup(cfg)
+    
 plc = AutomationController(ioc)
 plc.start()
 socketServer = SocketServer(ioc, cfg.WebSocketServerHost, cfg.WebSocketServerPort)

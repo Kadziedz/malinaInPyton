@@ -1,5 +1,7 @@
 import datetime
 import logging
+import statistics
+import math
 import time
 from typing import Any
 from collections import defaultdict
@@ -122,7 +124,7 @@ class AutomationController(Thread):
                 locCmdRun = self._cmdRun
                 locCmdAuto= self._cmdAuto
                 
-            #read temperatures in paralel
+            #read temperatures in parallel
             if delta.total_seconds() >= min([4, (localSettings.DataSaveInterval >> 1)]) and future == None :
                 self._logger.warning(f"\nAUTO: {ledAutoMode.get()}\tMAN: {ledManualMode.get()}\trelay: {relay.get()}\tled: {ledPumpActive.get()}\n")
                 lastIteration = actualTime
@@ -153,7 +155,6 @@ class AutomationController(Thread):
             #automatic control iteration
             delta= actualTime - lasControlTime
             if self._isAutoMode and delta.total_seconds() >= localSettings.ControlInterval and actualTime.hour >= localSettings.DayStart and actualTime.hour <= localSettings.DayStop:
-                #TO DO 
                 lasControlTime = actualTime
                 lowerTemp = self._filter.Get(localSettings.LowerTempSensor)
                 higherTemp = self._filter.Get(localSettings.HigherTempSensor)
@@ -166,7 +167,7 @@ class AutomationController(Thread):
                         locCmdRun = False 
                         
                 maxInactivityTime = localSettings.MaxStateTime
-                avgT:float = 0
+                
                 
                 if localSettings.HigherTempSensor in self._devices and localSettings.LowerTempSensor in self._devices:
                     dayIndx:int = actualTime.year * 10000 + actualTime.month * 100 + actualTime.day
@@ -176,18 +177,35 @@ class AutomationController(Thread):
                     if samplesCount>0:
                         pts1:int = self._databaseContext.getPoints(dayIndx, idHigher, localSettings.MaxStateTime * 2)
                         pts2:int = self._databaseContext.getPoints(dayIndx, idLower, localSettings.MaxStateTime * 2)
-                        pass
-                    
-                    
-                    #TODO
-                    
-                    
+                        data:list= list()
+                        for key in pts1:
+                            if key in pts2:
+                                data.append(pts1[key].Value - pts2[key].Value)
+                        medianT:float = 0
+                        if len(data)>1:
+                            medianT = statistics.median(data)
+                        if localSettings.MinimumTempDiff <medianT:
+                            maxInactivityTime = localSettings.DecisionDelay + (localSettings.MaxStateTime -  localSettings.DecisionDelay) * math.exp( - (medianT -  localSettings.MinimumTempDiff) / 2.0 )
+                
+                delta = actualTime - workStop
+                if not self._isRun and ambientTemp > localSettings.MinimumAmbientTemp  and delta.total_seconds() > maxInactivityTime * 60:
+                    if maxInactivityTime != localSettings.MaxStateTime:
+                        self._logger.warning(f"avg temp diff {medianT}, waiting time was reduced to {maxInactivityTime}, measure temp request: decision turn on")
+                    else:
+                        self._logger.warning(f"avg temp diff {medianT}, waiting time is {maxInactivityTime}, measure temp request: decision turn on")
+                    locCmdRun = True
+                
+                delta = actualTime - workStart    
+                if self._isRun and delta.total_seconds() > localSettings.MaxStateTime:
+                    self._logger.warning("working too long, decision: turn off")
+                    locCmdRun= False
+            #end if self._isAutoMode and delta.total_seconds() >= localSettings.ControlInterval and actualTime.hour >= localSettings.DayStart and actualTime.hour <= localSettings.DayStop:         
             
             # ignore command, out of working hours in auto mode 
             if (self._isRun or locCmdRun) and (self._isAutoMode or locCmdAuto) and (actualTime.hour < localSettings.DayStart or actualTime.hour> localSettings.DayStop):
                 locCmdRun= False
                 with self._lock:
-                     self._cmdRun = False
+                    self._cmdRun = False #revoke command if exists
             
             #act
             # change work mode

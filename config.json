@@ -24,6 +24,7 @@
     "BlinkingLED": 7,
     "Relay": 6
   },
+  "WorkMode":"PI",
   "WebSocketServerHost": "127.0.0.1",
   "WebSocketServerPort": 8123,
   "ConnectionStrings": {

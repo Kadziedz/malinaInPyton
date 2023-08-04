@@ -98,7 +98,22 @@ class DatabaseContext:
         return None
     
     def getPoints(self, dayIndx:int, deviceId:int, maxTateTime:int)->list:
-        pass
+        try:
+            cnx = mysql.connector.connect(user=self._connectionString.User,
+                                          password=self._connectionString.Password,
+                                          host=self._connectionString.Host,
+                                          database=self._connectionString.Database)
+            query:str= "SELECT ID, EventTimeStamp, Value, DeviceID, DayIndx, IsWorking FROM DataPoints WHERE DayIndx = %(dayIndx)s and IsWorking and DeviceID=%(deviceID)s and EventTimeStamp >= date_add(now(), INTERVAL  -%(maxTime)s minute)  order by EventTimeStamp desc limit 0, 30"
+            cursor = cnx.cursor(dictionary=False)
+            cursor.execute(query, {"dayIndx": dayIndx,"deviceID": deviceId, "maxTime": maxTateTime})
+            rows = cursor.fetchall()
+            result = {row["EventTimeStamp"] : DataPoint(row["EventTimeStamp"], row["Value"], row["DayIndx"], row["IsWorking"], deviceId)  for row in rows}
+            return result
+        except Exception as e:
+            self._logger.critical(e, exc_info=True)
+        finally:
+            cnx.close()
+        return None
     
     def updateSettings(self, settings:Settings) -> None:
         self.__execute(DatabaseContext.QueryUpdateSettings, settings)        
