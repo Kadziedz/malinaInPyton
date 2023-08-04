@@ -5,8 +5,8 @@ import math
 import time
 from typing import Any
 from collections import defaultdict
-from collections.abc import Callable, Iterable, Mapping
 from threading import Lock, Thread
+from Interfaces.IContainer import IContainer
 from Interfaces.IRelay import IRelay
 from Interfaces.ISensor import ISensor
 from Interfaces.IMeasurementFilter import IMeasurementFilter
@@ -15,10 +15,8 @@ from Models.ObjectState import ObjectState
 from Models.Settings import Settings
 from Models.Thermometer import Thermometer
 from Repository.DatabaseContext import DatabaseContext
-from Services.MeasurementFilter import MeasurementFilter
 from Services.MessageBus import MessageBus
 from Models.Measurements import Measurements
-from Services.SimpleIoc import SimpleIoC
 from concurrent.futures import ThreadPoolExecutor
 
 class AutomationController(Thread):
@@ -29,7 +27,7 @@ class AutomationController(Thread):
     RELAY:str="Relay"
     EVENT_STATUS_UPDATE= __name__ + ".onStatusUpdate"
     
-    def __init__(self, ioc:SimpleIoC) -> None:
+    def __init__(self, ioc:IContainer) -> None:
         super().__init__()
         self._executor = ThreadPoolExecutor(1)
         self._databaseContext:DatabaseContext = ioc.getInstance(DatabaseContext)
@@ -100,6 +98,10 @@ class AutomationController(Thread):
         workStart:datetime= actualTime
         workStop:datetime= actualTime
         lasControlTime:datetime = actualTime
+        lowerTemp = self._filter.get(localSettings.LowerTempSensor)
+        higherTemp = self._filter.get(localSettings.HigherTempSensor)
+        ambientTemp = self._filter.get(localSettings.AmbientTempSensor)
+        
         future = None
         relay.set(self._isRun)
         if self._isAutoMode:
@@ -111,13 +113,14 @@ class AutomationController(Thread):
         relay.set(self._isRun)
         ledPumpActive.set(self._isRun)
         oldDayIndx:int=0
-        
+        flipFlop:bool= False
         while not self.isStopRequested():
 
             actualTime = datetime.datetime.now()
             delta:datetime.timedelta = actualTime - lastIteration
             locCmdRun:bool=False
             locCmdAuto:bool=False
+            
             with self._lock:
                 localSettings.update(self._actualSettings)
                 localStatus.update(self._actualState)
@@ -126,21 +129,25 @@ class AutomationController(Thread):
                 
             #read temperatures in parallel
             if delta.total_seconds() >= min([4, (localSettings.DataSaveInterval >> 1)]) and future == None :
-                self._logger.warning(f"\nAUTO: {ledAutoMode.get()}\tMAN: {ledManualMode.get()}\trelay: {relay.get()}\tled: {ledPumpActive.get()}\n")
+                self._logger.info(f"\nAUTO: {ledAutoMode.get()}\tMAN: {ledManualMode.get()}\trelay: {relay.get()}\tled: {ledPumpActive.get()}\n")
                 lastIteration = actualTime
-                ledBlinker.set(True)
                 future = self._executor.submit(AutomationController.__dirtyTemperaturesRead, (self._meters))
             
             delta = actualTime - lastUpdateSent
             if delta.total_seconds()>0.5:
                 lastUpdateSent = actualTime
+                flipFlop = not flipFlop
+                ledBlinker.set(flipFlop)
+                #self._logger.warn(f"lowerTemp = {lowerTemp},\thigherTemp = {higherTemp},\tambientTemp = {ambientTemp}")
                 self._messageBus.sendNamedEvent(AutomationController.EVENT_STATUS_UPDATE, localStatus.toDictionary())
                 
             #consume new temperatures
             if future != None and future.done():
                 measurements.clear()
-                measurements.update(self._consumeMeasurements(future.result(), localStatus, localSettings))
-                ledBlinker.set(False)
+                localMeasurements = AutomationController.__filterTemperaturesAndAddOffsets(future.result(), self._filter, localSettings, self._logger)
+                AutomationController.__updateLocalStatusTemperatures(localMeasurements, localStatus, self._logger)
+                measurements.update(localMeasurements)
+                self._logger.warn(str(measurements))
                 future = None
                     
             #store measurements in the database
@@ -154,12 +161,13 @@ class AutomationController(Thread):
               
             #automatic control iteration
             delta= actualTime - lasControlTime
-            if self._isAutoMode and delta.total_seconds() >= localSettings.ControlInterval and actualTime.hour >= localSettings.DayStart and actualTime.hour <= localSettings.DayStop:
+            lowerTemp = self._filter.get(localSettings.LowerTempSensor)
+            higherTemp = self._filter.get(localSettings.HigherTempSensor)
+            ambientTemp = self._filter.get(localSettings.AmbientTempSensor)
+            
+            if self._isAutoMode and delta.total_seconds() >= localSettings.ControlInterval and actualTime.hour >= localSettings.DayStart and actualTime.hour <= localSettings.DayStop and not (lowerTemp is None or higherTemp is None or ambientTemp is None):
                 lasControlTime = actualTime
-                lowerTemp = self._filter.Get(localSettings.LowerTempSensor)
-                higherTemp = self._filter.Get(localSettings.HigherTempSensor)
-                ambientTemp = self._filter.Get(localSettings.AmbientTempSensor)
-                
+                    
                 if self._isRun:
                     activityTime:datetime.timedelta = actualTime  - workStart
                     if activityTime.total_seconds() > localSettings.DecisionDelay * 60 and lowerTemp + localSettings.MinimumTempDiff > higherTemp:
@@ -240,19 +248,12 @@ class AutomationController(Thread):
                 if self._actualState != localStatus:
                     self._actualState.update(localStatus)
                     self._messageBus.updateStatus(localStatus)
+
             time.sleep(0.3)
-    
-    def _consumeMeasurements(self, localMeasurements:dict, localStatus:ObjectState, localSettings:Settings)->dict:
-        localMeasurements = AutomationController.__filterTemperaturesAndAddOffsets(localMeasurements, self._filter, localSettings, self._logger)
-        AutomationController.__updateLocalStatusTemperatures(localMeasurements, localStatus, self._logger)
-        with self._lock:
-            self._actualState.update(localStatus)
-        self._messageBus.updateStatus(localStatus)
-        return localMeasurements
-        
+          
     def __storeDataPoints(self, oldDayIndx:int, actualTime:datetime.datetime, measurements:dict)->int:
         self._messageBus.sendEvent(Measurements(measurements.copy(), self._isRun, actualTime))
-        self._logger.info(f"store to db requested {str(measurements)}")
+        self._logger.warn(f"store to db requested {actualTime}\t{self._isRun}\t{str(measurements)}")
         twoDaysPast:datetime.datetime = actualTime - datetime.timedelta(days=2)
         dayIndx = twoDaysPast.year * 10000 + twoDaysPast.month * 100 + twoDaysPast.day
         if oldDayIndx!= dayIndx:
@@ -280,7 +281,7 @@ class AutomationController(Thread):
             else:
                 temperature = AutomationController.__addOffsets(temperature, label, localSettings)
                 filter.updateMeasurements(label, temperature, localSettings.MeasurementSamplesCount)
-                filteredTemp = filter.Get(label)
+                filteredTemp = filter.get(label)
                 logger.debug(f"filtered temperature [{label}] = {filteredTemp}")
             measurements[label] = filteredTemp
                 

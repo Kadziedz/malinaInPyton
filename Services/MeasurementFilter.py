@@ -32,9 +32,9 @@ class MeasurementFilter(IMeasurementFilter):
             self._tailLen = tailLen
             self.removeOldMeasurements(key)
 
-            self._measurements[key].append(Measurement(self._dateProvider.GetActualDate(), val))
+            self._measurements[key].append(Measurement(self._dateProvider.getActualDate(), val))
 
-    def Get(self, key: str) -> float:
+    def get(self, key: str) -> float:
 
         with self._lock:
             self.removeOldMeasurements(key)
@@ -43,8 +43,8 @@ class MeasurementFilter(IMeasurementFilter):
             return sum([point.value for point in self._measurements[key]])/len(self._measurements[key])
 
     def removeOldMeasurements(self, key: str):
-        now = datetime.now()
-        nowMinus10 = now + timedelta(minutes=-10)
+        now:datetime= self._dateProvider.getActualDate()
+        nowMinus10:datetime = now + timedelta(minutes=-10)
         if key in self._measurements :
             while len(self._measurements[key]) > 0 and self._measurements[key][-1].dateTime < nowMinus10:
                 self._measurements[key].popleft()

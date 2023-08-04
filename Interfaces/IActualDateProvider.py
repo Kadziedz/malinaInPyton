@@ -3,7 +3,7 @@ from datetime import datetime
 class IActualDateProvider(ABC):
     
     @abstractmethod
-    def GetActualDate(self) -> datetime:
+    def getActualDate(self) -> datetime:
         pass
 
 

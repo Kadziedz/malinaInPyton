@@ -8,5 +8,5 @@ class IMeasurementFilter(ABC):
         pass
 
     @abstractmethod
-    def Get(self, key: str) -> float:
+    def get(self, key: str) -> float:
         pass

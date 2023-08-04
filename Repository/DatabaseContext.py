@@ -104,7 +104,7 @@ class DatabaseContext:
                                           host=self._connectionString.Host,
                                           database=self._connectionString.Database)
             query:str= "SELECT ID, EventTimeStamp, Value, DeviceID, DayIndx, IsWorking FROM DataPoints WHERE DayIndx = %(dayIndx)s and IsWorking and DeviceID=%(deviceID)s and EventTimeStamp >= date_add(now(), INTERVAL  -%(maxTime)s minute)  order by EventTimeStamp desc limit 0, 30"
-            cursor = cnx.cursor(dictionary=False)
+            cursor = cnx.cursor(dictionary=True)
             cursor.execute(query, {"dayIndx": dayIndx,"deviceID": deviceId, "maxTime": maxTateTime})
             rows = cursor.fetchall()
             result = {row["EventTimeStamp"] : DataPoint(row["EventTimeStamp"], row["Value"], row["DayIndx"], row["IsWorking"], deviceId)  for row in rows}

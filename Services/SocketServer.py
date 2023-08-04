@@ -1,16 +1,14 @@
 #!/usr/bin/env python
-import asyncio
-from collections.abc import Callable, Iterable, Mapping
+#from collections.abc import Callable, Iterable, Mapping
 import json
 from typing import Any
 import websockets
-import time
 import logging
 from collections import defaultdict
 from threading import Lock, Thread
+from Interfaces.IContainer import IContainer
 from Interfaces.IMessageBus import IMessageBus
 from websockets.sync.server import WebSocketServer, ServerConnection
-from Services.SimpleIoc import SimpleIoC
 
 #https://docs.python.org/3/library/asyncio-eventloop.html#running-and-stopping-the-loop
 #https://websockets.readthedocs.io/en/stable/reference/sync/server.html#
@@ -18,7 +16,7 @@ from Services.SimpleIoc import SimpleIoC
 class SocketServer(Thread):
     EVENT_NEW_SOCKET_MESSAGE:str= "onNewSocketMessage"
     
-    def __init__(self, ioc:SimpleIoC, ip:str="127.0.0.1", port:int=8351) -> None:
+    def __init__(self, ioc:IContainer, ip:str="127.0.0.1", port:int=8351) -> None:
         super().__init__()
         self._logger = logging.getLogger(__class__.__name__)
         self._lock: Lock = Lock()

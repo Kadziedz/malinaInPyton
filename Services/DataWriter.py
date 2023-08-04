@@ -1,5 +1,6 @@
 import logging
 from threading import Lock, Thread
+from Interfaces.IContainer import IContainer
 
 from Interfaces.IMessageBus import IMessageBus
 from Models.DTO.dtos import DataPoint
@@ -7,11 +8,9 @@ from Models.Settings import Settings
 from Repository.DatabaseContext import DatabaseContext
 from Services.MessageBus import MessageBus
 from Models.Measurements import Measurements
-from Services.SimpleIoc import SimpleIoC
-
 
 class DataWriter(object):
-    def __init__(self, ioc:SimpleIoC) -> None:
+    def __init__(self, ioc:IContainer) -> None:
         self._databaseContext:DatabaseContext = ioc.getInstance(DatabaseContext)
         self._messageBus = ioc.getInstance(IMessageBus)
         rawData = self._databaseContext.getDevices()

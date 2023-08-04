@@ -1,5 +1,9 @@
 #!/usr/bin/env python
-from parameterized import parameterized, parameterized_class
+from datetime import datetime
+from Interfaces.IActualDateProvider import IActualDateProvider
+from Interfaces.IContainer import IContainer
+from Services.SimpleIoc import SimpleIoC
+from parameterized import parameterized
 import unittest
 import random
 from Services.MeasurementFilter import MeasurementFilter
@@ -7,8 +11,46 @@ from Interfaces.IMeasurementFilter import IMeasurementFilter
 #https://realpython.com/python-testing/
 #https://stackoverflow.com/questions/32899/how-do-you-generate-dynamic-parameterized-unit-tests-in-python
 
-class TestMeasurementFilterTest(unittest.TestCase):
+class FakeDateProvider(IActualDateProvider):
+    
+    def __init__(self) -> None:
+        super().__init__()
+        self.__date = datetime(2023, 1,1,13,0,0,0)
+    
+    def getActualDate(self) -> datetime:
+        return self.__date
+    
+    def setDate(self, actualDate:datetime)->None:
+        self.__date = actualDate
 
+# def setUpModule():
+    # print('Running setUpModule')
+
+
+# def tearDownModule():
+    # print('Running tearDownModule')
+
+class TestMeasurementFilterTest(unittest.TestCase):
+    # @classmethod
+    # def setUpClass(cls):
+        # print('Running setUpClass')
+
+    # @classmethod
+    # def tearDownClass(cls):
+        # print('Running tearDownClass')
+    
+    def setUp(self):
+        self._dateProvider.setDate(datetime(2023, 1,1,13,0,0,0))
+
+    # def tearDown(self):
+        # print('Running tearDown')
+    
+    def __init__(self, methodName: str = "runTest") -> None:
+        super().__init__(methodName)
+        self._ioc = SimpleIoC()
+        self._dateProvider = FakeDateProvider()
+        self._ioc.registerSingleton(IActualDateProvider, self._dateProvider)
+        
     @parameterized.expand([
         ("foo", list(),  None),
         ("foo", list([1.0]),  1.0),
@@ -26,12 +68,12 @@ class TestMeasurementFilterTest(unittest.TestCase):
         test filtering for one sensor
         """            
         #arrange
-        filter:MeasurementFilter = MeasurementFilter()
+        filter:MeasurementFilter = MeasurementFilter(self._ioc)
         
         #act
         for number in sequence:
             filter.updateMeasurements(label, number, 5)
-        filteredOne:float = filter.Get(label)    
+        filteredOne:float = filter.get(label)    
         
         #assert
         self.assertEqual(filteredOne, expectedValue, "filtered value should have expected value")
@@ -53,12 +95,12 @@ class TestMeasurementFilterTest(unittest.TestCase):
         test filtering for one sensor
         """            
         #arrange
-        filter:MeasurementFilter = MeasurementFilter()
+        filter:MeasurementFilter = MeasurementFilter(self._ioc)
         
         #act
         for number in sequence:
             filter.updateMeasurements(label, number, 5)
-        filteredOne:float = filter.Get("bar")    
+        filteredOne:float = filter.get("bar")    
         
         #assert
         self.assertEqual(filteredOne, expectedValue, "filtered value should have expected value")
@@ -83,7 +125,7 @@ class TestMeasurementFilterTest(unittest.TestCase):
         test filtering for one sensor
         """            
         #arrange
-        filter:MeasurementFilter = MeasurementFilter()
+        filter:MeasurementFilter = MeasurementFilter(self._ioc)
         fooLabel:str= "fooLabel"
         barLabel:str= "barLabel"
         generator:random.Random = random.Random()
@@ -104,8 +146,8 @@ class TestMeasurementFilterTest(unittest.TestCase):
         expectedFoo = sum(fooElements)/len(fooElements) if len(fooElements)<5 else sum(fooElements[-5:])/5
         expectedBar = sum(barElements)/len(barElements) if len(barElements)<5 else sum(barElements[-5:])/5
         
-        filteredFoo:float = filter.Get(fooLabel)    
-        filteredBar:float = filter.Get(barLabel)    
+        filteredFoo:float = filter.get(fooLabel)    
+        filteredBar:float = filter.get(barLabel)    
         
         #assert
         self.assertEqual(filteredFoo, expectedFoo, "filteredFoo value should have expected value")

@@ -1,13 +1,14 @@
 from Automation.Gauge import Gauge
 from Automation.Relay import Relay
+from Interfaces.IActualDateProvider import IActualDateProvider
 from Interfaces.IMeasurementFilter import IMeasurementFilter
 from Interfaces.IMessageBus import IMessageBus
 from Models.Config import Config
 from Repository.DatabaseContext import DatabaseContext
+from Services.ActualDateProvider import ActualDateProvider
 from Services.MeasurementFilter import MeasurementFilter
 from Services.MessageBus import MessageBus
 from Services.SimpleIoc import SimpleIoC
-
 
 def Startup(config:Config)->SimpleIoC:
     # initial setup
@@ -28,5 +29,7 @@ def Startup(config:Config)->SimpleIoC:
     thermometers = Gauge.getDevices()
     ioc.registerSingleton("thermometers", thermometers)
     ioc.registerSingleton("config", config)
-    ioc.registerSingleton(IMeasurementFilter , MeasurementFilter())
+    ioc.registerSingleton(IActualDateProvider, ActualDateProvider())
+    ioc.registerSingleton(IMeasurementFilter, MeasurementFilter(ioc))
+    
     return ioc

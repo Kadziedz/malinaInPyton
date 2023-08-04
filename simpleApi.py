@@ -14,8 +14,7 @@ from Models.ObjectState import ObjectState
 from Services.AutomationController import AutomationController
 from Services.DataWriter import DataWriter
 import Startup 
-
-from SocketServer import SocketServer
+from  Services.SocketServer import SocketServer
 
 # https://www.imaginarycloud.com/blog/flask-python/
 # https://towardsdatascience.com/the-right-way-to-build-an-api-with-python-cd08ab285f8f
@@ -55,6 +54,8 @@ mb.register(AutomationController.EVENT_STATUS_UPDATE, sendStatusNotification )
 writer = DataWriter(ioc)
 
 app = Flask(__name__)
+app.logger.setLevel(level=os.environ.get("LOGLEVEL", cfg.LogLevel))
+
 api = Api(app)
 api.add_resource(StatusController, '/api',
                  resource_class_kwargs={"messageBus": ioc.getInstance(IMessageBus)})
