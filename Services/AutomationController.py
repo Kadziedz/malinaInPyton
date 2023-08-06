@@ -153,9 +153,9 @@ class AutomationController(Thread):
             #store measurements in the database
             delta = actualTime - lastDbWrite
             if  len(measurements)>0  and \
-                ( delta.total_seconds()> localSettings.DataSaveInterval and actualTime.hour >= localSettings.DayStart and actualTime.hour<= localSettings.DayStop) \
+                ( delta.total_seconds()> localSettings.DataSaveInterval and actualTime.hour >= localSettings.DayStart and actualTime.hour< localSettings.DayStop) \
                 or \
-                ( delta.total_seconds()> localSettings.DataSaveInterval * 5 and (actualTime.hour < localSettings.DayStart or actualTime.hour> localSettings.DayStop)):
+                ( delta.total_seconds()> localSettings.DataSaveInterval * 5 and (actualTime.hour < localSettings.DayStart or actualTime.hour>= localSettings.DayStop)):
                 oldDayIndx = self.__storeDataPoints(oldDayIndx, actualTime, measurements.copy())
                 lastDbWrite = actualTime
               
@@ -165,7 +165,7 @@ class AutomationController(Thread):
             higherTemp = self._filter.get(localSettings.HigherTempSensor)
             ambientTemp = self._filter.get(localSettings.AmbientTempSensor)
             
-            if self._isAutoMode and delta.total_seconds() >= localSettings.ControlInterval and actualTime.hour >= localSettings.DayStart and actualTime.hour <= localSettings.DayStop and not (lowerTemp is None or higherTemp is None or ambientTemp is None):
+            if self._isAutoMode and delta.total_seconds() >= localSettings.ControlInterval and actualTime.hour >= localSettings.DayStart and actualTime.hour < localSettings.DayStop and not (lowerTemp is None or higherTemp is None or ambientTemp is None):
                 lasControlTime = actualTime
                     
                 if self._isRun:
@@ -210,7 +210,7 @@ class AutomationController(Thread):
             #end if self._isAutoMode and delta.total_seconds() >= localSettings.ControlInterval and actualTime.hour >= localSettings.DayStart and actualTime.hour <= localSettings.DayStop:         
             
             # ignore command, out of working hours in auto mode 
-            if (self._isRun or locCmdRun) and (self._isAutoMode or locCmdAuto) and (actualTime.hour < localSettings.DayStart or actualTime.hour> localSettings.DayStop):
+            if (self._isRun or locCmdRun) and (self._isAutoMode or locCmdAuto) and (actualTime.hour < localSettings.DayStart or actualTime.hour>= localSettings.DayStop):
                 locCmdRun= False
                 
             
@@ -256,7 +256,7 @@ class AutomationController(Thread):
           
     def __storeDataPoints(self, oldDayIndx:int, actualTime:datetime.datetime, measurements:dict)->int:
         self._messageBus.sendEvent(Measurements(measurements.copy(), self._isRun, actualTime))
-        self._logger.warn(f"store to db requested {actualTime}\t{self._isRun}\t{str(measurements)}")
+        self._logger.info(f"store to db requested {actualTime}\t{self._isRun}\t{str(measurements)}")
         twoDaysPast:datetime.datetime = actualTime - datetime.timedelta(days=2)
         dayIndx = twoDaysPast.year * 10000 + twoDaysPast.month * 100 + twoDaysPast.day
         if oldDayIndx!= dayIndx:
