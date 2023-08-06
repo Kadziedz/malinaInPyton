@@ -15,7 +15,8 @@ class Measurement:
 
 
 class MeasurementFilter(IMeasurementFilter):
-
+    HISTORY_VALID_BOUNDARY:int =10
+    
     def __init__(self, ioc:IContainer = None) -> None:
         super().__init__()
         self._dateProvider:IActualDateProvider = ioc.getInstance(IActualDateProvider)
@@ -44,7 +45,7 @@ class MeasurementFilter(IMeasurementFilter):
 
     def removeOldMeasurements(self, key: str):
         now:datetime= self._dateProvider.getActualDate()
-        nowMinus10:datetime = now + timedelta(minutes=-10)
+        nowMinus10:datetime = now + timedelta(minutes=-MeasurementFilter.HISTORY_VALID_BOUNDARY)
         if key in self._measurements :
             while len(self._measurements[key]) > 0 and self._measurements[key][-1].dateTime < nowMinus10:
                 self._measurements[key].popleft()

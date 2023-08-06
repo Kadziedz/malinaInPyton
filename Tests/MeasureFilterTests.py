@@ -92,7 +92,7 @@ class TestMeasurementFilterTest(unittest.TestCase):
     ])
     def test_RequestNonExistingSensorValue_NoneReceived(self, label:str, sequence:list, expectedValue:float):
         """
-        test filtering for one sensor
+        test filtering for one sensor but querying non existing one
         """            
         #arrange
         filter:MeasurementFilter = MeasurementFilter(self._ioc)
@@ -122,7 +122,7 @@ class TestMeasurementFilterTest(unittest.TestCase):
     ])
     def test_RequestNonExistingSensorValue_NoneReceived(self, fooLen:int, barLen:int):
         """
-        test filtering for one sensor
+        test filtering for two sensors
         """            
         #arrange
         filter:MeasurementFilter = MeasurementFilter(self._ioc)
@@ -152,3 +152,69 @@ class TestMeasurementFilterTest(unittest.TestCase):
         #assert
         self.assertEqual(filteredFoo, expectedFoo, "filteredFoo value should have expected value")
         self.assertEqual(filteredBar, expectedBar, "filteredBar value should have expected value")
+        
+    def test_MakeTailLenShorter_ValidResultReceived(self):
+        """make tail length shorter during work
+        """
+        #arrange
+        sequence:list = (2.0, 4.0, 6.0, 8.0, 10.0, 12.0, 14.0, 16.0, 18.0)
+        filter:MeasurementFilter = MeasurementFilter(self._ioc)
+        label:str ="foo"
+        expectedValue1 = 10
+        expectedValue2 = 16
+        
+        #act
+        for number in sequence:
+            filter.updateMeasurements(label, number, 10)
+        
+        filtered1 = filter.get(label)
+        filter.updateMeasurements(label, 20.0, 5)    
+        filtered2 = filter.get(label)
+        
+        #assert
+        self.assertEqual(filtered1, expectedValue1, "filtered value should have expected value")
+        self.assertEqual(filtered2, expectedValue2, "filtered value should have expected value")
+        
+    def test_ReadAfterLongTime_OldDataRemoved(self):
+        """read date after time boundary 
+        """
+        #arrange
+        self._dateProvider.setDate(datetime(2023, 1,1,13,0,0,0))
+
+        sequence:list = (2.0, 4.0, 6.0, 8.0, 10.0, 12.0, 14.0, 16.0, 18.0)
+        filter:MeasurementFilter = MeasurementFilter(self._ioc)
+        label:str ="foo"
+        expectedValue1 = None
+        #act
+        for number in sequence:
+            filter.updateMeasurements(label, number, 5)
+        self._dateProvider.setDate(datetime(2023, 1,1,13,MeasurementFilter.HISTORY_VALID_BOUNDARY+1,0,0))
+        filtered1 = filter.get(label)
+
+        #assert
+        self.assertEqual(filtered1, expectedValue1, "filtered value should have expected value")
+        
+    def test_ReadAfterLongTime_OldDataRemovedAndNewUsed(self):
+        """ store data after time boundary,m only new data should be used
+        """
+        #arrange
+        self._dateProvider.setDate(datetime(2023, 1,1,13,0,0,0))
+
+        sequence:list = (2.0, 4.0, 6.0, 8.0, 10.0, 12.0, 14.0, 16.0, 18.0)
+        filter:MeasurementFilter = MeasurementFilter(self._ioc)
+        label:str ="foo"
+        expectedValue1 = None
+        expectedValue2 = 12
+        #act
+        for number in sequence:
+            filter.updateMeasurements(label, number, 5)
+        self._dateProvider.setDate(datetime(2023, 1,1,13,MeasurementFilter.HISTORY_VALID_BOUNDARY+1,0,0))
+        filtered1 = filter.get(label)
+        filter.updateMeasurements(label, 10, 5)
+        filter.updateMeasurements(label, 12, 5)
+        filter.updateMeasurements(label, 14, 5)
+        filtered2 = filter.get(label)
+
+        #assert
+        self.assertEqual(filtered1, expectedValue1, "filtered value should have expected value")
+        self.assertEqual(filtered2, expectedValue2, "filtered value should have expected value")
