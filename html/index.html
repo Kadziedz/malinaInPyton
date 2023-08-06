@@ -1,0 +1,896 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <!-- Required meta tags -->
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+
+    <!-- Bootstrap CSS -->
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+	<link rel="stylesheet" href="css/bootstrap-slider.min.css">
+	<!-- Optional JavaScript -->
+    <!-- jQuery first, then Popper.js, then Bootstrap JS -->
+	<script src="dependencies/js/jquery.min.js"></script>
+	<script src="js/popper.min.js"></script>
+	<script src="js/jquery-3.5.1.min.js" ></script>
+    <script src="js/popper.min.js" ></script>
+    <script src="js/bootstrap.min.js"></script>
+	<script src="js/Chart.bundle.min.js"></script>
+	<script src="js/moment-with-locales.min.js"></script>
+	<script src="js/bootstrap-slider.min.js"></script>
+	<script src="dependencies/js/highlight.min.js"></script>
+	<script>hljs.initHighlightingOnLoad();</script>
+    <title>Basen</title>
+	<style>
+	#historyLen		.slider-selection,				
+	#HigherTempSensorOffset .slider-selection,
+	#LowerTempSensorOffset .slider-selection,
+	#AmbientTempSensorOffset .slider-selection,
+	#MinimumAmbientTemp .slider-selection,
+	#MeasurementSamplesCount .slider-selection,
+	#ControlInterval .slider-selection,
+	#DataSaveInterval .slider-selection,
+	#MaxStateTime .slider-selection,
+	#DecisionDelay .slider-selection,
+	#minTempDiff .slider-selection,
+	#minWorkTimespan .slider-selection
+	{
+		background: MediumSeaGreen;
+	}
+	</style>
+
+	<script>
+	var historyLength=4;
+	var chartData ;
+	var settings=null;
+	var statusData=null;
+
+	function refreshChart()
+	{
+		setTimeout(refreshChart, 25000);
+		QueryChart();
+	}
+	
+	function ExecuteCommand(cmd)
+	{
+		param= 'man';
+		if(cmd==1)//man/auto
+		{
+			param = statusData.IsAutoMode?'man':'auto';
+		}
+		else//on/off
+		{
+			param = statusData.IsRelayOn?'off':'on';
+		}
+		
+		$.ajax({	type: "GET",
+					url: 'cmd.php?cmd='+param,
+					success: function(data) 
+					{
+						$('#connectionError').hide();
+					},
+						error: function() 
+						{
+							$('#connectionError').show();
+							RefreshSettings()
+						}
+				});
+	}
+	function SaveSettings()
+	{
+		settings.MinimumTempDiff =minTempDiff.bootstrapSlider('getValue');
+		arr = minWorkTimespan.bootstrapSlider('getValue');
+		settings.DayStart = arr[0];
+		settings.DayStop = arr[1];
+		settings.DecisionDelay= DecisionDelay.bootstrapSlider('getValue');
+		settings.MaxStateTime= MaxStateTime.bootstrapSlider('getValue');
+		settings.ControlInterval =ControlInterval.bootstrapSlider('getValue');
+		settings.DataSaveInterval =DataSaveInterval.bootstrapSlider('getValue');
+		settings.MeasurementSamplesCount =MeasurementSamplesCount.bootstrapSlider('getValue');
+		settings.MinimumAmbientTemp = MinimumAmbientTemp.bootstrapSlider('getValue');
+		settings.LowerTempSensor= $('#sensorSupply').val();
+		settings.HigherTempSensor =$('#sensorReturn').val();
+		settings.AmbientTempSensor =$('#sensorAmbient').val();
+
+		settings.HigherTempSensorOffset =HigherTempSensorOffset.bootstrapSlider('getValue');
+		settings.LowerTempSensorOffset =LowerTempSensorOffset.bootstrapSlider('getValue');
+		settings.AmbientTempSensorOffset =AmbientTempSensorOffset.bootstrapSlider('getValue');
+		
+		//console.log(settings);
+		$.ajax({	url: 'setConfig.php',
+						type: "POST",
+						data: settings,
+						success: function(data) 
+						{
+							//console.log(data);
+							QueryStatus();
+							RefreshSettings();
+							QueryChart();
+							$('#msgSuccess').show();
+							$('#msgError').hide()
+						},
+						error: function() 
+						{
+							$('#msgSuccess').hide();
+							$('#msgError').show()
+							RefreshSettings()
+							
+						}
+				});
+	}
+	function RefreshSettings()
+	{
+		$.ajax({	url: 'getConfig.php',
+					type: "GET",
+					success: function(data) 
+					{
+						settings=data;
+						if(statusData==null)
+							return;
+						//console.log('RefreshSettings');
+						var htmlString1 = "";
+						for(var item of statusData.Device) 
+						{
+							if(settings.LowerTempSensor==item.Name)
+								htmlString1 += "<option selected>"+item.Name+'</option>';
+							else
+								htmlString1 += "<option>"+item.Name+'</option>';
+							
+						}
+						$('#sensorSupply').html(htmlString1);
+						var htmlString2 = "";
+						for(var item of statusData.Device) 
+						{
+							if(settings.HigherTempSensor==item.Name)
+								htmlString2 += "<option selected>"+item.Name+'</option>';
+							else
+								htmlString2 += "<option>"+item.Name+'</option>';
+							
+						}
+						$('#sensorReturn').html(htmlString2);
+						
+						var htmlString3 = "";
+						for(var item of statusData.Device) 
+						{
+							if(settings.AmbientTempSensor==item.Name)
+								htmlString3 += "<option selected>"+item.Name+'</option>';
+							else
+								htmlString3 += "<option>"+item.Name+'</option>';
+							
+						}
+						$('#sensorAmbient').html(htmlString3);
+						
+						
+						minTempDiff.bootstrapSlider('setValue',settings.MinimumTempDiff);
+						$("#minTempDiffVal").text(settings.MinimumTempDiff);
+						
+						minWorkTimespan.bootstrapSlider('setValue',[settings.DayStart,settings.DayStop]);
+						$("#minWorkTimespanStart").text(settings.DayStart);
+						$("#minWorkTimespanStop").text(settings.DayStop);
+						
+						DecisionDelay.bootstrapSlider('setValue',settings.DecisionDelay);
+						$("#DecisionDelayVal").text(settings.DecisionDelay);
+						
+						MaxStateTime.bootstrapSlider('setValue',settings.MaxStateTime);
+						$("#MaxStateTimeVal").text(settings.MaxStateTime);
+						
+						ControlInterval.bootstrapSlider('setValue',settings.ControlInterval);
+						$("#ControlIntervalVal").text(settings.ControlInterval);
+						
+						DataSaveInterval.bootstrapSlider('setValue',settings.DataSaveInterval);
+						$("#DataSaveIntervalVal").text(settings.DataSaveInterval);
+						
+						MeasurementSamplesCount.bootstrapSlider('setValue',settings.MeasurementSamplesCount);
+						$("#MeasurementSamplesCountVal").text(settings.MeasurementSamplesCount);
+
+						MinimumAmbientTemp.bootstrapSlider('setValue',settings.MinimumAmbientTemp);
+						$("#MinimumAmbientTempVal").text(settings.MinimumAmbientTemp);
+						
+						HigherTempSensorOffset.bootstrapSlider('setValue',settings.HigherTempSensorOffset);
+						$("#HigherTempSensorOffsetVal").text(settings.HigherTempSensorOffset);
+						
+						LowerTempSensorOffset.bootstrapSlider('setValue',settings.LowerTempSensorOffset);
+						$("#LowerTempSensorOffsetVal").text(settings.LowerTempSensorOffset);
+						
+						AmbientTempSensorOffset.bootstrapSlider('setValue',settings.AmbientTempSensorOffset);
+						$("#AmbientTempSensorOffsetVal").text(settings.AmbientTempSensorOffset);
+						$('#connectionError').hide();	
+						var dt = new Date(Date.now());					
+						$("#markerSettings").text(dt.getHours() + ":" + dt.getMinutes() + ":" + dt.getSeconds()   );
+					},
+					error: function() 
+					{
+						$('#connectionError').show();
+						$("#markerSettings").html('##e');
+					}
+		});
+	}
+	
+	function QueryChart()
+	{
+		$.ajax({	type: "GET",
+					url: 'chart.php?len='+historyLength,
+					success: function(data) 
+					{
+						chartData=data;
+						if(statusData==null)
+						{
+							$('#connectionError').show();
+							return;
+						}
+										
+						points = [];
+						config.data.labels=[];
+						//lower temp
+						try
+						{
+							for(var item of chartData[statusData.LowerTempSensor]) 
+							{	
+								dt =new Date(item.date);
+								//console.log(item.date.substring(11,19));
+								points.push({x: dt, y:parseFloat(item.value) });
+								config.data.labels.push(item.date.substring(11,19));
+							}
+						}
+						catch(error)
+						{
+							console.log(error);
+							$('#connectionError').show();
+						}
+						config.data.datasets[0].data=points ;
+						//higer temp
+						points = [];
+						try
+						{
+							for(var item of chartData[statusData.HigherTempSensor]) 
+							{
+								points.push({x: new Date(item.date), y:parseFloat(item.value) });
+							}
+						}catch(error)
+						{
+							console.log(error);
+							$('#connectionError').show();
+						}
+						config.data.datasets[1].data=points ;
+						//ambient temp
+						points = [];
+						try
+						{
+							for(var item of chartData[statusData.AmbientTempSensor]) 
+							{
+								points.push({x: new Date(item.date), y:parseFloat(item.value) });
+							}
+						}catch(error)
+						{
+							console.log(error);
+							$('#connectionError').show();
+						}
+						config.data.datasets[2].data=points ;
+						//work
+						points = [];
+						try
+						{
+							for(var item of chartData['work']) 
+							{
+								points.push({x: new Date(item.date), y:parseFloat(item.value) });
+							}
+						}
+						catch(error)
+						{
+							console.log(error);
+							$('#connectionError').show();
+						}
+						config.data.datasets[3].data=points ;
+
+
+						points = [];
+						//lower temp
+						try
+						{
+							for(var item of chartData[statusData.LowerTempSensor]) 
+							{	
+								dt =new Date(item.date);
+								//console.log(item.date.substring(11,19));
+								refValue =  parseFloat(item.value) +  parseFloat(settings.MinimumTempDiff)
+								points.push({x: dt, y:refValue});
+							}
+						}
+						catch(error)
+						{
+							console.log(error);
+							$('#connectionError').show();
+						}
+						config.data.datasets[4].data=points ;
+
+
+
+
+						var myChart = new Chart(ctx, config);
+		
+						var dt = new Date(Date.now())	;					
+						$("#markerChart").text(dt.getHours() + ":" + dt.getMinutes() + ":" + dt.getSeconds()   );
+					},
+					error: function() 
+					{
+						$('#connectionError').show();
+						$("#markerStatus").html('##');
+					}		
+		})
+	}
+	
+	function QueryStatus()
+	{
+		//console.log('QueryStatus');
+		$.ajax({	type: "GET",
+					url: 'getStatus.php',
+					success: function(data) 
+					{
+						UpdateStatus(data);
+					},
+					error: function() 
+					{
+						//$('#invoiceCourse').val('błąd zapytania');
+						$("#markerStatus").html("##");
+						$('#connectionError').show();
+					}
+		})
+	}
+	var HigherTempSensorOffset;
+	var LowerTempSensorOffset;
+	var AmbientTempSensorOffset;
+	var minTempDiff;
+	var minWorkTimespan;
+	var MaxStateTime;
+	var DecisionDelay;
+	var ControlInterval;
+	var DataSaveInterval;
+	var MinimumAmbientTemp;
+	var MeasurementSamplesCount;
+	var historyLen;
+    $( document ).ready(function() 
+	{
+		$('#msgSuccess').hide();
+		$('#msgError').hide();
+		ConnectToWebSocket();
+		setTimeout(refreshChart, 10000);
+		minTempDiff =$("#minTempDiff").bootstrapSlider();
+		$("#minTempDiff").on("slide", function(slideEvt) {
+			$("#minTempDiffVal").text(slideEvt.value);
+		});
+		minWorkTimespan	=$("#minWorkTimespan").bootstrapSlider();	
+		$("#minWorkTimespan").on("slide", function(slideEvt) {
+		//console.log(slideEvt.value);
+			$("#minWorkTimespanStart").text(slideEvt.value[0]);
+			$("#minWorkTimespanStop").text(slideEvt.value[1]);
+		});	
+		DecisionDelay	=$("#DecisionDelay").bootstrapSlider();	
+		$("#DecisionDelay").on("slide", function(slideEvt) {
+			$("#DecisionDelayVal").text(slideEvt.value);
+		});		
+		MaxStateTime	=$("#MaxStateTime").bootstrapSlider();	
+		$("#MaxStateTime").on("slide", function(slideEvt) {
+			$("#MaxStateTimeVal").text(slideEvt.value);
+		});		
+		ControlInterval=$("#ControlInterval").bootstrapSlider();	
+		$("#ControlInterval").on("slide", function(slideEvt) {
+			$("#ControlIntervalVal").text(slideEvt.value);
+		});		
+		DataSaveInterval= $("#DataSaveInterval").bootstrapSlider();
+		$("#DataSaveInterval").on("slide", function(slideEvt) {
+			$("#DataSaveIntervalVal").text(slideEvt.value);
+		});		
+		MeasurementSamplesCount= $("#MeasurementSamplesCount").bootstrapSlider();
+		$("#MeasurementSamplesCount").on("slide", function(slideEvt) {
+			$("#MeasurementSamplesCountVal").text(slideEvt.value);
+		});
+		MinimumAmbientTemp= $("#MinimumAmbientTemp").bootstrapSlider();
+		$("#MinimumAmbientTemp").on("slide", function(slideEvt) {
+			$("#MinimumAmbientTempVal").text(slideEvt.value);
+		});
+		
+		HigherTempSensorOffset= $("#HigherTempSensorOffset").bootstrapSlider();
+		$("#HigherTempSensorOffset").on("slide", function(slideEvt) {
+			$("#HigherTempSensorOffsetVal").text(slideEvt.value);
+		});
+		
+		LowerTempSensorOffset= $("#LowerTempSensorOffset").bootstrapSlider();
+		$("#LowerTempSensorOffset").on("slide", function(slideEvt) {
+			$("#LowerTempSensorOffsetVal").text(slideEvt.value);
+		});
+		
+		AmbientTempSensorOffset= $("#AmbientTempSensorOffset").bootstrapSlider();
+		$("#AmbientTempSensorOffset").on("slide", function(slideEvt) {
+			$("#AmbientTempSensorOffsetVal").text(slideEvt.value);
+			
+		});
+		historyLen= $("#historyLen").bootstrapSlider();
+		$("#historyLenVal").text(historyLength);
+		$("#historyLen").on("slide", function(slideEvt) {
+			$("#historyLenVal").text(slideEvt.value);
+			historyLength=slideEvt.value;
+			QueryChart();
+			
+		});
+		historyLen.bootstrapSlider('setValue', historyLength);
+		
+	});
+ 
+	function ConnectToWebSocket()
+	{
+		var webSocketClient = new WebSocket("ws://192.168.21.16:8123");	
+		webSocketClient.onopen = (event) => {
+			console.log("connected")
+			$('#connectionError').hide();
+		};	
+		
+		webSocketClient.onmessage = (event) => {
+			statusData = JSON.parse(event.data);
+			UpdateStatus(statusData);
+			if (settings == null)
+			{
+				RefreshSettings();
+				QueryChart();
+			}
+		};
+		webSocketClient.onclose = function(e) {
+			//console.log('Socket is closed. Reconnect will be attempted in 1 second.', e.reason);
+			setTimeout(function() {
+			  ConnectToWebSocket();
+			}, 1000);
+		};
+		webSocketClient.onerror = function(err) {
+			//console.error('Socket encountered error: ', err.message, 'Closing socket');
+			webSocketClient.close();
+			$("#markerStatus").html("##");
+			$('#connectionError').show();
+		};
+	}
+
+	function UpdateStatus(data)
+	{
+		if(data.HigherSensorTemp>-999)
+			$('#tmpHigh').html(data.HigherSensorTemp.toFixed(2)+"&nbsp;&#176;C");
+		else
+			$('#tmpHigh').html("##&nbsp;&#176;C");
+		if(data.LowerSensorTemp>-999)
+			$('#tmpLow').html(data.LowerSensorTemp.toFixed(2)+"&nbsp;&#176;C");
+		else
+			$('#tmpLow').html("##&nbsp;&#176;C");
+			
+		if(data.AmbientSensorTemp>-999)
+			$('#tmpAmbient').html(data.AmbientSensorTemp.toFixed(2)+"&nbsp;&#176;C");
+		else
+			$('#tmpAmbient').html("##&nbsp;&#176;C");	
+			
+		$('#workMode').html(data.IsAutoMode?"AUTO":"MAN");
+		if(data.IsAutoMode)
+		{
+			$('#workMode').addClass("btn-warning");
+			$('#workMode').removeClass("btn-success") ;
+		}
+		else
+		{
+			$('#workMode').addClass("btn-success");
+			$('#workMode').removeClass("btn-warning") ;
+		}
+		$('#pumpState').html(data.IsRelayOn?"PRACA":"STOP");
+		if(data.IsRelayOn)
+		{
+			$('#pumpState').addClass("btn-success");
+			$('#pumpState').removeClass("btn-danger") ;
+		}
+		else
+		{
+			$('#pumpState').addClass("btn-danger");
+			$('#pumpState').removeClass("btn-success") ;
+		}
+		if(data.HigherSensorTemp>data.LowerSensorTemp)
+		{
+			$('#tmpHigh').addClass("text-success");
+			$('#tmpHigh').removeClass("text-primary") ;
+		}
+		else
+		{
+			$('#tmpHigh').addClass("text-primary");
+			$('#tmpHigh').removeClass("text-success") ;
+		}
+		if(data.LowerSensorTemp>=28)
+		{
+			$('#tmpLow').addClass("text-success");
+			$('#tmpLow').removeClass("text-primary") ;
+		}
+		else
+		{
+			$('#tmpLow').addClass("text-primary");
+			$('#tmpLow').removeClass("text-success") ;
+		}
+		if(settings!=null)
+		{
+			if(data.HigherSensorTemp>settings.MinimumAmbientTemp)
+			{
+				$('#tmpAmbient').addClass("text-success");
+				$('#tmpAmbient').removeClass("text-primary") ;
+			}
+			else
+			{
+				$('#tmpAmbient').addClass("text-primary");
+				$('#tmpAmbient').removeClass("text-success") ;
+			}
+		}
+
+		var dt = new Date(Date.now())	;					
+		$("#markerStatus").text(dt.getHours() + ":" + dt.getMinutes() + ":" + dt.getSeconds()   );
+		
+	}
+    </script>
+  </head>
+  <body>
+
+		<div class="container mt-2" >
+			<div class="container-fluid " >
+				<div class="alert alert-danger" role="alert" id="connectionError">
+						Błąd połączenia!
+						<button type="button" class="close" data-dismiss="alert" aria-label="Close">
+							<span aria-hidden="true">&times;</span>
+						</button>
+					</div>
+				<ul class="nav nav-tabs" role="tablist">
+					<li class="nav-item"><a href="#controllTab" class="nav-link active" role="tab" data-toggle="tab">Praca</a></li>
+					<li class="nav-item"><a href="#configTab" class="nav-link" role="tab" data-toggle="tab" onclick="RefreshSettings();">Konfiguracja</a></li>
+				</ul>
+				<div class="tab-content  p-3" style="border-bottom: 1px solid #dee2e6;; border-left: 1px solid #dee2e6;; border-right: 1px solid #dee2e6;">
+					<div class="tab-pane active  text-secondary font-weight-bold h3 mt-2" id="controllTab">
+						<div class="row  pd-pu-4 mt-1">
+							<div class="col col-sm-4" >
+								Otoczenie
+							</div>
+							<div class="col col-sm-7 text-center" id="tmpAmbient">
+								
+							</div>
+						</div>
+						<div class="row  pd-pu-4 mt-1">
+							<div class="col col-sm-4" >
+								Basen
+							</div>
+							<div class="col col-sm-7 text-center" id="tmpLow">
+								
+							</div>
+						</div>
+						<div class="row pd-pu-4  mt-1">
+							<div class="col col-sm-4   " >
+								Powrót
+							</div>
+							<div class="col col-sm-7 text-center" id="tmpHigh">
+								
+							</div>
+						</div>
+						
+						<div class="row pd-pu-4 mt-1">
+							<div class="col col-sm-4" >
+								Tryb
+							</div>
+							<div class="col col-sm-7 text-center btn h2" id="workMode" role="button" aria-pressed="false" onclick="ExecuteCommand(1); return false;">
+								
+							</div>
+						
+						</div>
+						<div class="row  pd-pu-4 mt-1" >
+							<div class="col col-sm-4" >
+								Stan
+							</div>
+							<div class="col col-sm-7 text-center btn h2 " id="pumpState" role="button" aria-pressed="false" onclick="ExecuteCommand(2); return false;">
+								
+							</div>
+							
+						</div>
+						<hr class="col-xs-12"/>
+						<div class="row  pd-pu-4 mt-1">
+							<canvas id="myChart" width="720" height="720" class="mt-3"></canvas>
+						</div>
+						<div class="form-group h5">
+										<label  for="historyLen">pokaż ostatnie <strong id="historyLenVal"></strong><strong>h</strong></label>
+										<span class="form-control">
+											<input  id="historyLen" 
+												style="width:100%"
+												data-slider-id='historyLen' type="text" data-slider-min="1" data-slider-max="12" data-slider-step="1" data-slider-value="0"/>
+										</span>
+									</div>
+					</div>
+						<div class="tab-pane " id="configTab">
+							<div class="alert alert-success" role="alert" id="msgSuccess">
+								Udany zapis usawień
+								<button type="button" class="close" data-dismiss="alert" aria-label="Close">
+								<span aria-hidden="true">&times;</span>
+							</button>
+						</div>
+						<div class="alert alert-danger" role="alert" id="msgError">
+							Niepowodzenie przy zapisie ustawień
+							<button type="button" class="close" data-dismiss="alert" aria-label="Close">
+								<span aria-hidden="true">&times;</span>
+							</button>
+						</div>
+						<ul class="nav nav-pills nav-fill"  role="tablist">
+							<li class="nav-item">
+								<a class="nav-link active" href="#tabSettingsTemperatures" role="tab" data-toggle="tab">Temperatury</a>
+							</li>
+							<li class="nav-item">
+								<a class="nav-link" href="#tabSettingsControll" role="tab" data-toggle="tab">Sterowanie</a>
+							</li>
+						</ul>
+						<hr  class="col-xs-12"/>
+						<form class="was-validated">
+							<div class="tab-content">
+								<div class="tab-pane active" id="tabSettingsTemperatures" style="min-height:700px">
+									<div class="form-group">
+										<label for="sensorAmbient">Czyjnik temperatury otoczenia</label>
+										<select class="form-control" id="sensorAmbient">
+
+										</select>
+									</div> 
+									<div class="form-group">
+										<label  for="AmbientTempSensorOffset">Poprawka czujnika temperatury otoczenia <strong id="AmbientTempSensorOffsetVal"></strong><strong> [&#176;C]</strong></label>
+										<span class="form-control">
+											<input  id="AmbientTempSensorOffset" 
+												style="width:100%"
+												data-slider-id='AmbientTempSensorOffset' type="text" data-slider-min="-5" data-slider-max="5" data-slider-step="0.1" data-slider-value="0"/>
+										</span>
+									</div>
+									<div class="form-group">
+										<label for="sensorSupply">Czujnik w basenie</label>
+										<select class="form-control" id="sensorSupply">
+
+										</select>
+									</div> 
+									<div class="form-group">
+										<label  for="LowerTempSensorOffset">Poprawka czujnika basenu <strong id="LowerTempSensorOffsetVal"></strong><strong> [&#176;C]</strong></label>
+										<span class="form-control">
+											<input  id="LowerTempSensorOffset" 
+												style="width:100%"
+												data-slider-id='LowerTempSensorOffset' type="text" data-slider-min="-5" data-slider-max="5" data-slider-step="0.1" data-slider-value="0"/>
+										</span>
+									</div>
+									<div class="form-group">
+										<label for="sensorReturn">Czujnik w powrotny</label>
+										<select class="form-control" id="sensorReturn">
+
+										</select>
+									</div> 
+									<div class="form-group">
+										<label  for="HigherTempSensorOffset">Poprawka czujnika temperatury powrotu <strong id="HigherTempSensorOffsetVal"></strong><strong> [&#176;C]</strong></label>
+										<span class="form-control">
+											<input  id="HigherTempSensorOffset" 
+												style="width:100%"
+												data-slider-id='HigherTempSensorOffset' type="text" data-slider-min="-5" data-slider-max="5" data-slider-step="0.1" data-slider-value="0"/>
+										</span>
+									</div>
+									<div class="form-group">
+										<label  for="MinimumAmbientTemp">Minimalna temperatura otoczenia <strong id="MinimumAmbientTempVal"></strong><strong> [&#176;C]</strong></label>
+										<span class="form-control">
+											<input  id="MinimumAmbientTemp" 
+												style="width:100%"
+												data-slider-id='MinimumAmbientTemp'  data-slider-id='MinimumAmbientTemp' type="text" data-slider-min="18" data-slider-max="40" data-slider-step="1" data-slider-value="14"/>
+										</span>
+									</div>
+									<div class="form-group">
+										<label  for="minTempDiff">Minimalna różnica temperatur wyzwalająca pracę <strong id="minTempDiffVal"></strong><strong> [&#176;C]</strong></label>
+										<span class="form-control">
+											<input  id="minTempDiff" 
+												style="width:100%"
+												data-slider-id='minTempDiff'  data-slider-id='minTempDiff' type="text" data-slider-min="1" data-slider-max="15" data-slider-step="1" data-slider-value="14"/>
+										</span>
+									</div>
+								</div>
+								<div class="tab-pane" id="tabSettingsControll" style="min-height:700px">
+									<div class="form-group">
+										<label  for="minWorkTimespan">Czas aktywności przy automatycznej regulacji  od <strong id="minWorkTimespanStart"></strong><strong>:00</strong> do <strong id="minWorkTimespanStop"></strong><strong>:00</strong></label>
+										<span class="form-control">
+											<input  id="minWorkTimespan" 
+												style="width:100%"
+												data-slider-id='minWorkTimespan' type="text" data-slider-min="0" data-slider-max="23" data-slider-step="1" data-slider-value="[8,18]"/>
+										</span>
+									</div>
+									<div class="form-group">
+										<label  for="DecisionDelay">Czas pomiaru temperatury <strong id="DecisionDelayVal"></strong><strong> [min]</strong></label>
+										<span class="form-control">
+											<input  id="DecisionDelay" 
+												style="width:100%"
+												data-slider-id='DecisionDelay' type="text" data-slider-min="1" data-slider-max="30" data-slider-step="1" data-slider-value="0"/>
+										</span>
+									</div>
+									<div class="form-group">
+										<label  for="MaxStateTime">Czas cyklu <strong id="MaxStateTimeVal"></strong><strong> [min]</strong></label>
+										<span class="form-control">
+											<input  id="MaxStateTime" 
+												style="width:100%"
+												data-slider-id='MaxStateTime' type="text" data-slider-min="1" data-slider-max="30" data-slider-step="1" data-slider-value="0"/>
+										</span>
+									</div>
+									<div class="form-group">
+										<label  for="ControlInterval">Cykl sterowania <strong id="ControlIntervalVal"></strong><strong> [s]</strong></label>
+										<span class="form-control">
+											<input  id="ControlInterval" 
+												style="width:100%"
+												data-slider-id='ControlInterval' type="text" data-slider-min="1" data-slider-max="30" data-slider-step="1" data-slider-value="0"/>
+										</span>
+									</div>
+									<div class="form-group">
+										<label  for="DataSaveInterval">Okres zapisu pomiarow do bazy danych <strong id="DataSaveIntervalVal"></strong><strong> [s]</strong></label>
+										<span class="form-control">
+											<input  id="DataSaveInterval" 
+												style="width:100%"
+												data-slider-id='DataSaveInterval' type="text" data-slider-min="60" data-slider-max="600" data-slider-step="10" data-slider-value="0"/>
+										</span>
+									</div>
+									<div class="form-group">
+										<label  for="MeasurementSamplesCount">Liczba próbek do uśrednienia pomiaru <strong id="MeasurementSamplesCountVal"></strong></label>
+										<span class="form-control">
+											<input  id="MeasurementSamplesCount" 
+												style="width:100%"
+												data-slider-id='MeasurementSamplesCount' type="text" data-slider-min="1" data-slider-max="30" data-slider-step="1" data-slider-value="0"/>
+										</span>
+									</div>
+								</div>
+							</div>
+							<div class="form-group">
+
+									<button type="button" class="btn btn-success form-control" onclick="SaveSettings();return false;">Zapisz</button>
+
+							</div>
+							
+						</form>
+					</div>
+				</div>
+				<div>
+					<div class="row  pd-pu-4 mt-1 text-muted text-center h6	">
+						<div class="col col-sm-4" >
+							Status: <strong id="markerStatus">##</strong>
+						</div>
+						<div class="col col-sm-4" >
+							Chart: <strong id="markerChart">##</strong>
+						</div>
+						<div class="col col-sm-4" >
+							Settings: <strong id="markerSettings">##</strong>
+						</div>
+						
+					</div>
+				</div>
+			</div>
+		</div>
+	<script>
+	
+	
+var ctx = document.getElementById('myChart').getContext('2d');
+var config ={
+    data: {
+			labels: ['aa', 'bb', 'cc', 'dd', 'ee'],
+			datasets: [
+				{
+					type: 'line',
+					fill: false,
+					backgroundColor: "#ff0000",
+					borderColor: "#ff0000",
+					label: ['Basen'],
+					yAxisID: 'idTemp',
+					data: [{ x: new Date('8:30'), y: 20}, { x: new Date('8:31'),y: 10}, { x: new Date('8:32'),y: 15}],
+					borderWidth: 3,
+					pointRadius: 0
+				},
+				{
+					type: 'line',
+					fill: false,
+					backgroundColor: "#0000ff",
+					borderColor: "#0000ff",
+					label: ['Powrót'],
+					yAxisID: 'idTemp',
+					data: [{ x: new Date('8:30'), y: 20}, { x: new Date('8:31'),y: 15}, { x: new Date('8:32'),y: 18}],
+					borderWidth: 3,
+					pointRadius: 0
+				},
+				{
+					type: 'line',
+					fill: false,
+					backgroundColor: "#ababab",
+					borderColor: "#ababab",
+					label: ['Otoczenie'],
+					yAxisID: 'idTemp',
+					data: [{ x: new Date('8:30'), y: 20}, { x: new Date('8:31'),y: 15}, { x: new Date('8:32'),y: 18}],
+					borderWidth: 1,
+					pointRadius: 0
+				},
+				{
+					type: 'line',
+					fill: true,
+
+					label: ['Praca'],
+					yAxisID: 'idWork',
+					data: [{ x: new Date('8:30'), y: 20}, { x: new Date('8:31'),y: 15}, { x: new Date('8:32'),y: 18}],
+					borderWidth: 1,
+					steppedLine: true,
+					pointRadius: 0
+				},
+				{
+					type: 'line',
+					fill: false,
+					backgroundColor: "#ff0000",
+					borderColor: "#ff0000",
+					label: ['Basen + min róznica temperatur'],
+					yAxisID: 'idTemp',
+					data: [{ x: new Date('8:30'), y: 20}, { x: new Date('8:31'),y: 15}, { x: new Date('8:32'),y: 18}],
+					borderWidth: 1,
+					pointRadius: 0
+				}
+		]
+    },
+    options:  {
+				animation: {
+					duration: 0
+				},
+				responsive: true,
+				title: {
+					display: false,
+					text: 'pomiar temperatur'
+				},
+				
+				scales: {
+					xAxes: [
+					{
+					 type: "time",
+						time: 
+						{
+							parser: 'HH:mm:ss',
+							tooltipFormat: 'HH:mm:ss',
+							unit: 'minute',
+							unitStepSize: 10,
+							displayFormats: 
+							{
+								minute: 'HH:mm',
+								hour: 'HH:mm',
+								day:'MM DD'
+							}
+						},
+						display: true,
+						scaleLabel: 
+						{
+							display: true,
+							labelString: 'czas'
+						},
+					
+					}],
+					
+					yAxes: [
+					{
+						id: 'idTemp',
+						
+						display: true,
+						ticks: {
+						
+							stepSize:1
+						},
+						scaleLabel: {
+							display: true,
+							labelString: 'temperatura'
+						}
+					},
+					{
+						id: 'idWork',
+						display: false,
+						ticks: {
+							beginAtZero: true,
+							max: 1,
+							min: 0,
+							stepSize:1
+						},
+						scaleLabel: {
+							display: false,
+							labelString: 'praca'
+						}
+
+					}
+					]
+				}
+			}
+};
+var myChart = new Chart(ctx, config);
+</script>
+  </body>
+</html>
