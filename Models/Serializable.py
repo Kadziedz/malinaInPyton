@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 import json
 
+
 class Serializable(ABC):
     
     def __init__(self) -> None:

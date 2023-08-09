@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 
+
 class ISensor(ABC):
     """ sensor interface, used to measure temperatures
 
@@ -9,7 +10,7 @@ class ISensor(ABC):
     #     pass
 
     @abstractmethod
-    def measure(self, key=None):
+    def measure(self):
         """
             provides temperature obtained from the sensor
         Args:

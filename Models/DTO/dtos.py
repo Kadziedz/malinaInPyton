@@ -2,13 +2,14 @@
 from dataclasses import dataclass, field
 from datetime import datetime
 
+
 @dataclass
 class DataPoint:
     EventTimeStamp: datetime = None
     Value: float = 0
     DayIndx: int = 0
     IsWorking: bool = False
-    DeviceID:int = 0
+    DeviceID: int = 0
 
 
 @dataclass
@@ -20,8 +21,6 @@ class Device:
 
 @dataclass
 class ControlEvent:
-    EventTImestamp: datetime = None
+    EventTimestamp: datetime = None
     Status: int = 0
     DayIndx: int = 0
-
-

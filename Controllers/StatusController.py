@@ -1,6 +1,7 @@
 from Interfaces.IMessageBus import IMessageBus
 from Controllers.ControllerRoot import ControllerRoot
 
+
 class StatusController(ControllerRoot):
 
     def __init__(self, messageBus: IMessageBus) -> None:

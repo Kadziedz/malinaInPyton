@@ -15,11 +15,11 @@ class Measurement:
 
 
 class MeasurementFilter(IMeasurementFilter):
-    HISTORY_VALID_BOUNDARY:int =10
+    HISTORY_VALID_BOUNDARY: int = 10
     
-    def __init__(self, ioc:IContainer = None) -> None:
+    def __init__(self, ioc: IContainer = None) -> None:
         super().__init__()
-        self._dateProvider:IActualDateProvider = ioc.getInstance(IActualDateProvider)
+        self._dateProvider: IActualDateProvider = ioc.getInstance(IActualDateProvider)
         self._logger = logging.getLogger(__name__)
         self._sync = Lock()
         self._measurements = defaultdict()
@@ -28,7 +28,7 @@ class MeasurementFilter(IMeasurementFilter):
 
     def updateMeasurements(self, key: str, val: float, tailLen: int) -> None:
         with self._lock:
-            if not key in self._measurements:
+            if key not in self._measurements:
                 self._measurements[key] = deque()
             self._tailLen = tailLen
             self.removeOldMeasurements(key)
@@ -39,14 +39,14 @@ class MeasurementFilter(IMeasurementFilter):
 
         with self._lock:
             self.removeOldMeasurements(key)
-            if not key in self._measurements or len(self._measurements[key]) <= 0:
+            if key not in self._measurements or len(self._measurements[key]) <= 0:
                 return None
             return sum([point.value for point in self._measurements[key]])/len(self._measurements[key])
 
     def removeOldMeasurements(self, key: str):
-        now:datetime= self._dateProvider.getActualDate()
-        nowMinus10:datetime = now + timedelta(minutes=-MeasurementFilter.HISTORY_VALID_BOUNDARY)
-        if key in self._measurements :
+        now: datetime = self._dateProvider.getActualDate()
+        nowMinus10: datetime = now + timedelta(minutes=-MeasurementFilter.HISTORY_VALID_BOUNDARY)
+        if key in self._measurements:
             while len(self._measurements[key]) > 0 and self._measurements[key][-1].dateTime < nowMinus10:
                 self._measurements[key].popleft()
             while len(self._measurements[key]) > self._tailLen:

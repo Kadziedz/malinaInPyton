@@ -1,16 +1,31 @@
 from collections import defaultdict
-from Interfaces.ISensor import ISensor
 from Models.Config import ConnectionString
 from Models.Settings import Settings
 import mysql.connector
 from Models.DTO.dtos import Device, DataPoint
 import logging
-from datetime import datetime
 
 
 class DatabaseContext:
-    QueryGetSettings = "SELECT `ID`, `LowerTempSensor`, `HigherTempSensor`, `AmbientTempSensor`, `LowerTempSensorOffset`, `HigherTempSensorOffset`, `AmbientTempSensorOffset`, `MinimumTempDiff`, `MinimumAmbientTemp`, `IsAuto`, `DayStart`, `DayStop`, `DecisionDelay`, `MeasurementSamplesCount`, `MaxStateTime`, `ControlInterval`, `DataSaveInterval` FROM `AppSettings` LIMIT 0,1"
-    QueryUpdateSettings ="UPDATE AppSettings SET \
+    QueryGetSettings = "SELECT `ID`,\
+    `LowerTempSensor`,\
+    `HigherTempSensor`,\
+    `AmbientTempSensor`,\
+    `LowerTempSensorOffset`,\
+    `HigherTempSensorOffset`,\
+    `AmbientTempSensorOffset`,\
+    `MinimumTempDiff`,\
+    `MinimumAmbientTemp`,\
+    `IsAuto`,\
+    `DayStart`,\
+    `DayStop`,\
+    `DecisionDelay`,\
+    `MeasurementSamplesCount`,\
+    `MaxStateTime`,\
+    `ControlInterval`,\
+    `DataSaveInterval`\
+    FROM `AppSettings` LIMIT 0,1"
+    QueryUpdateSettings = "UPDATE AppSettings SET \
     `LowerTempSensor` = %(LowerTempSensor)s,\
     `HigherTempSensor`= %(HigherTempSensor)s,\
     `AmbientTempSensor`= %(AmbientTempSensor)s,\
@@ -65,13 +80,16 @@ class DatabaseContext:
     QueryGetDevices = "SELECT D.`ID`, D.`Name` FROM `Devices` as D "
     QueryGetDevice = "SELECT D.`ID`, D.`Name` FROM `Devices` as D WHERE D.Name=%(Name)s"
     QueryInsertDevice = "INSERT INTO `Devices`(`Name`) VALUES (%(Name)s)"
-    QueryInsertPoint = "INSERT INTO `DataPoints`(`EventTimeStamp`, `Value`, `DeviceID`, `DayIndx`, `IsWorking`) VALUES (%(EventTimeStamp)s, %(Value)s,  %(DeviceID)s, %(DayIndx)s, %(IsWorking)s)"
+    QueryInsertPoint = "INSERT INTO `DataPoints`(`EventTimeStamp`, `Value`, `DeviceID`, `DayIndx`, `IsWorking`)\
+     VALUES (%(EventTimeStamp)s, %(Value)s,  %(DeviceID)s, %(DayIndx)s, %(IsWorking)s)"
+
     def __init__(self, connectionString: ConnectionString) -> None:
         self._connectionString: ConnectionString = connectionString
         self._logger = logging.getLogger(__name__)
-        self._initialSettings:Settings = Settings()
+        self._initialSettings: Settings = Settings()
         
-    def getSettings(self, defaultSettings: Settings=None) -> Settings:
+    def getSettings(self, defaultSettings: Settings = None) -> Settings:
+        cnx = None
         try:
             cnx = mysql.connector.connect(user=self._connectionString.User,
                                           password=self._connectionString.Password,
@@ -81,79 +99,97 @@ class DatabaseContext:
             cursor.execute(DatabaseContext.QueryGetSettings)
             row = cursor.fetchone()
               
-            if row == None or cursor.rowcount <= 0 and defaultSettings!= NotImplemented:
+            if row is None or cursor.rowcount <= 0 and defaultSettings != NotImplemented:
                 params = defaultSettings.toDictionary()
                 cursor.execute(DatabaseContext.QueryInsertSettings, params)
                 cnx.commit()
                 cursor.execute(DatabaseContext.QueryGetSettings)
                 self._initialSettings.update(defaultSettings)
             cursor.close()  
-            if row != None and isinstance(row, dict):
+            if row is not None and isinstance(row, dict):
                 self._initialSettings.update(row)
                 return self._initialSettings
         except Exception as e:
             self._logger.critical(e, exc_info=True)
         finally:
-            cnx.close()
+            if cnx is not None:
+                cnx.close()
         return None
     
-    def getPoints(self, dayIndx:int, deviceId:int, maxTateTime:int)->list:
+    def getPoints(self, dayIndx: int, deviceId: int, maxTateTime: int) -> dict:
+        cnx = None
         try:
             cnx = mysql.connector.connect(user=self._connectionString.User,
                                           password=self._connectionString.Password,
                                           host=self._connectionString.Host,
                                           database=self._connectionString.Database)
-            query:str= "SELECT ID, EventTimeStamp, Value, DeviceID, DayIndx, IsWorking FROM DataPoints WHERE DayIndx = %(dayIndx)s and IsWorking and DeviceID=%(deviceID)s and EventTimeStamp >= date_add(now(), INTERVAL  -%(maxTime)s minute)  order by EventTimeStamp desc limit 0, 30"
+            query: str = "SELECT ID, EventTimeStamp, Value, DeviceID, DayIndx, IsWorking\
+            FROM DataPoints \
+            WHERE DayIndx = %(dayIndx)s and \
+            IsWorking and \
+            DeviceID=%(deviceID)s and \
+            EventTimeStamp >= date_add(now(), INTERVAL  -%(maxTime)s minute) \
+            order by EventTimeStamp desc limit 0, 30"
             cursor = cnx.cursor(dictionary=True)
-            cursor.execute(query, {"dayIndx": dayIndx,"deviceID": deviceId, "maxTime": maxTateTime})
+            cursor.execute(query, {"dayIndx": dayIndx, "deviceID": deviceId, "maxTime": maxTateTime})
             rows = cursor.fetchall()
-            result = {row["EventTimeStamp"] : DataPoint(row["EventTimeStamp"], row["Value"], row["DayIndx"], row["IsWorking"], deviceId)  for row in rows}
+            result = {row["EventTimeStamp"]: DataPoint(row["EventTimeStamp"],
+                                                       row["Value"],
+                                                       row["DayIndx"],
+                                                       row["IsWorking"],
+                                                       deviceId) for row in rows}
             return result
         except Exception as e:
             self._logger.critical(e, exc_info=True)
         finally:
-            cnx.close()
+            if cnx is not None:
+                cnx.close()
         return None
     
-    def updateSettings(self, settings:Settings) -> None:
+    def updateSettings(self, settings: Settings) -> None:
         self.__execute(DatabaseContext.QueryUpdateSettings, settings)        
     
-    def createSettings(self, settings: Settings) :
+    def createSettings(self, settings: Settings):
         self.__execute(DatabaseContext.QueryInsertSettings, settings)        
         
-    def __execute(self, query:str, settings:Settings)->None:
+    def __execute(self, query: str, settings: Settings) -> None:
+        cnx = None
         try:
             cnx = mysql.connector.connect(user=self._connectionString.User,
                                           password=self._connectionString.Password,
                                           host=self._connectionString.Host,
                                           database=self._connectionString.Database)
             cursor = cnx.cursor()
-            cursor.execute( query, settings.toDictionary())
+            cursor.execute(query, settings.toDictionary())
             cnx.commit()
             cursor.close()
         except Exception as e:
             self._logger.critical(e, exc_info=True)
             raise e
         finally:
-            cnx.close()
+            if cnx is not None:
+                cnx.close()
 
     def getDevices(self) -> list:
-        result = defaultdict()
+        result: list
+        cnx = None
         try:
             cnx = mysql.connector.connect(user=self._connectionString.User,
                                           password=self._connectionString.Password,
                                           host=self._connectionString.Host,
                                           database=self._connectionString.Database)
             cursor = cnx.cursor(dictionary=True)
-            cursor.execute(DatabaseContext.QueryGetDevices )
+            cursor.execute(DatabaseContext.QueryGetDevices)
             rows = cursor.fetchall()
             result = [Device(int(row["ID"]), str(row["Name"]), None) for row in rows]
         finally:
-            cnx.close()
+            if cnx is not None:
+                cnx.close()
 
         return result
 
-    def deleteOldMeasurements(self, dayIndex:int)->None:
+    def deleteOldMeasurements(self, dayIndex: int) -> None:
+        cnx = None
         try:
             cnx = mysql.connector.connect(user=self._connectionString.User,
                                           password=self._connectionString.Password,
@@ -164,16 +200,21 @@ class DatabaseContext:
             cnx.commit()
             cursor.close()
         finally:
-            cnx.close()
+            if cnx is not None:
+                cnx.close()
            
-    def getPointsQuantity(self, dayIndx:int, deviceId:int)->int:
+    def getPointsQuantity(self, dayIndx: int, deviceId: int) -> int:
+        cnx = None
         try:
             cnx = mysql.connector.connect(user=self._connectionString.User,
                                           password=self._connectionString.Password,
                                           host=self._connectionString.Host,
                                           database=self._connectionString.Database)
             cursor = cnx.cursor(dictionary=False)
-            cursor.execute("SELECT count(*) FROM DataPoints WHERE DeviceID=%(deviceID)s and DayIndx= %(dayIndx)s and IsWorking=1", {"dayIndx":dayIndx, "deviceID": deviceId})
+            cursor.execute("SELECT count(*) \
+            FROM DataPoints \
+            WHERE DeviceID=%(deviceID)s and DayIndx= %(dayIndx)s and IsWorking=1",
+                           {"dayIndx": dayIndx, "deviceID": deviceId})
             row = cursor.fetchone()
             cursor.close()
             return row[0]
@@ -181,10 +222,12 @@ class DatabaseContext:
             self._logger.critical(e, exc_info=True)
             raise e
         finally:
-            cnx.close()
+            if cnx is not None:
+                cnx.close()
      
-    def synchronizeDevices(self, physicalDeviceNamesList:list) -> dict:
+    def synchronizeDevices(self, physicalDeviceNamesList: list) -> dict:
         result = defaultdict()
+        cnx = None
         try:
             cnx = mysql.connector.connect(user=self._connectionString.User,
                                           password=self._connectionString.Password,
@@ -194,7 +237,7 @@ class DatabaseContext:
             for name in physicalDeviceNamesList:
                 cursor.execute(DatabaseContext.QueryGetDevice, {"Name": name})
                 rows = cursor.fetchall()
-                idDevice = 0
+                idDevice: int
                 points = list()
                 if len(rows) == 0:
                     cursor.execute(DatabaseContext.QueryInsertDevice, {"Name": name})
@@ -202,22 +245,29 @@ class DatabaseContext:
                     cnx.commit()
                 else:
                     idDevice = int(rows[0]["ID"])
-                    points = None#[DataPoint(item["EventTimeStamp"],  float(item["Value"]), int(item['DayIndx']), bool(item['IsWorking'])) for item in rows if item["Value"]!= None]
+                    points = None
                 newDevice = Device(idDevice, name, points)
-                result[name]= newDevice
+                result[name] = newDevice
             cursor.close()
         finally:
-            cnx.close()
+            if cnx is not None:
+                cnx.close()
 
         return result
 
-    def storeDataPoints(self, points:list)->None:
+    def storeDataPoints(self, points: list) -> None:
         try:
             cnx = mysql.connector.connect(user=self._connectionString.User,
                                           password=self._connectionString.Password,
                                           host=self._connectionString.Host,
                                           database=self._connectionString.Database)
-            rows = [ {"EventTimeStamp": point.EventTimeStamp, "Value": point.Value, "DeviceID": point.DeviceID, "DayIndx": int(point.EventTimeStamp.year)*10000 +  int(point.EventTimeStamp.month)*100 + point.EventTimeStamp.day, "IsWorking": point.IsWorking} for point in points]
+            rows = [{"EventTimeStamp": point.EventTimeStamp,
+                     "Value": point.Value,
+                     "DeviceID": point.DeviceID,
+                     "DayIndx": (int(point.EventTimeStamp.year)*10000 +
+                                 int(point.EventTimeStamp.month)*100 +
+                                 point.EventTimeStamp.day),
+                     "IsWorking": point.IsWorking} for point in points]
             
             cursor = cnx.cursor()
             cursor.executemany(DatabaseContext.QueryInsertPoint, rows)

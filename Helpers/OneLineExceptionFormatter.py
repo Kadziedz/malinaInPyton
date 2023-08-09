@@ -1,6 +1,6 @@
 import logging
-import os
- 
+
+
 class OneLineExceptionFormatter(logging.Formatter):
     def formatException(self, exc_info):
         result = super().formatException(exc_info)

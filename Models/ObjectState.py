@@ -4,6 +4,7 @@ from Models.Thermometer import Thermometer
 
 class ObjectState(Serializable):
     def __init__(self):
+        super().__init__()
         self.LowerSensorTemp: float = 0
         self.HigherSensorTemp: float = 0
         self.AmbientSensorTemp: float = 0
@@ -14,22 +15,22 @@ class ObjectState(Serializable):
         self.IsAutoMode = False
         self.Device = list()
 
-    def __ne__(self, __value: object) -> bool:
+    def __ne__(self, __value) -> bool:
         return self.LowerSensorTemp != __value.LowerSensorTemp or \
-        self.HigherSensorTemp != __value.HigherSensorTemp or \
-        self.AmbientSensorTemp != __value.AmbientSensorTemp or \
-        self.LowerTempSensor != __value.LowerTempSensor or \
-        self.AmbientTempSensor != __value.AmbientTempSensor or \
-        self.HigherTempSensor != __value.HigherTempSensor or \
-        self.IsRelayOn != __value.IsRelayOn or \
-        self.IsAutoMode != __value.IsAutoMode or\
-        not self.__isDevicesEqual(__value)
+            self.HigherSensorTemp != __value.HigherSensorTemp or \
+            self.AmbientSensorTemp != __value.AmbientSensorTemp or \
+            self.LowerTempSensor != __value.LowerTempSensor or \
+            self.AmbientTempSensor != __value.AmbientTempSensor or \
+            self.HigherTempSensor != __value.HigherTempSensor or \
+            self.IsRelayOn != __value.IsRelayOn or \
+            self.IsAutoMode != __value.IsAutoMode or\
+            not self.__isDevicesEqual(__value)
         
-    def __isDevicesEqual(self, __value: object)->bool:
-        if len(self.Device) != len(__value.Device) :
+    def __isDevicesEqual(self, __value) -> bool:
+        if len(self.Device) != len(__value.Device):
             return False
         for item in self.Device:
-            if not item in __value.Device:
+            if item not in __value.Device:
                 return False
         return True
     
@@ -68,6 +69,6 @@ class ObjectState(Serializable):
             self.IsAutoMode: bool = bool(src["IsAutoMode"])
             self.IsRelayOn: bool = bool(src["IsRelayOn"])
             self.Device: list = [Thermometer(item["Name"], item["Temperature"]) for item in src["Device"]]
-        self.LowerSensorTemp = -999 if self.LowerSensorTemp ==None else src.LowerSensorTemp
-        self.HigherSensorTemp = -999 if self.HigherSensorTemp ==None else  src.HigherSensorTemp
-        self.AmbientSensorTemp = -999 if self.AmbientSensorTemp ==None else  src.AmbientSensorTemp
+        self.LowerSensorTemp = -999 if self.LowerSensorTemp is None else src.LowerSensorTemp
+        self.HigherSensorTemp = -999 if self.HigherSensorTemp is None else src.HigherSensorTemp
+        self.AmbientSensorTemp = -999 if self.AmbientSensorTemp is None else src.AmbientSensorTemp

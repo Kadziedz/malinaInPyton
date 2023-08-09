@@ -10,21 +10,22 @@ from Services.MeasurementFilter import MeasurementFilter
 from Services.MessageBus import MessageBus
 from Services.SimpleIoc import SimpleIoC
 
-def Startup(config:Config)->SimpleIoC:
+
+def startup(config: Config) -> SimpleIoC:
     # initial setup
     dbContextSingleton = DatabaseContext(config.ConnectionStrings["ControlDB"])
     actualSettings = dbContextSingleton.getSettings()
     if actualSettings is None:
-        actualSettings=config.getSettings()
+        actualSettings = config.getSettings()
         dbContextSingleton.createSettings(actualSettings)
 
     messageBusSingleton = MessageBus()
     messageBusSingleton.updateSettings(actualSettings)
-    LEDs = { label:Relay(config.GPIO[label]) for label in config.GPIO }
+    LEDs = {label: Relay(config.GPIO[label]) for label in config.GPIO}
 
     ioc = SimpleIoC()
-    ioc.registerSingleton(IMessageBus, messageBusSingleton )
-    ioc.registerSingleton(DatabaseContext, dbContextSingleton )
+    ioc.registerSingleton(IMessageBus, messageBusSingleton)
+    ioc.registerSingleton(DatabaseContext, dbContextSingleton)
     ioc.registerSingleton("coils", LEDs)
     thermometers = Gauge.getDevices()
     ioc.registerSingleton("thermometers", thermometers)

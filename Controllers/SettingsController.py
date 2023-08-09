@@ -2,6 +2,7 @@ from flask import request
 from Interfaces.IMessageBus import IMessageBus
 from Controllers.ControllerRoot import ControllerRoot
 
+
 class SettingsController(ControllerRoot):
 
     def __init__(self, messageBus: IMessageBus) -> None:

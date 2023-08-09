@@ -4,6 +4,7 @@ import json
 import sys
 from Models.Serializable import Serializable
 
+
 @dataclass
 class ConnectionString(Serializable):
     User = ''
@@ -28,19 +29,20 @@ class ConnectionString(Serializable):
             self.Database = src["Database"]
             
     def toDictionary(self):
-        return { "User": self.User, "Password" : self.Password, "Host": self.Host, "Database": self.Database}        
+        return {"User": self.User, "Password": self.Password, "Host": self.Host, "Database": self.Database}
 
 
 class Config(Settings):
     def __init__(self, configFileName='config.json') -> None:
+        super().__init__()
         configDict = Config.getConfigDictionary(configFileName)
         super().update(configDict["Settings"])
         self.ConnectionStrings: dict = {item:  ConnectionString(configDict["ConnectionStrings"][item]) for item in configDict["ConnectionStrings"]}
         self.LogLevel = configDict["Logging"]["LogLevel"]
-        self.GPIO:dict = configDict["GPIO"]
-        self.WebSocketServerHost:str =  configDict["WebSocketServerHost"]
-        self.WebSocketServerPort:int =  int(configDict["WebSocketServerPort"])
-        self.isPi:bool = configDict["WorkMode"].upper() =="PI"
+        self.GPIO: dict = configDict["GPIO"]
+        self.WebSocketServerHost: str = configDict["WebSocketServerHost"]
+        self.WebSocketServerPort: int = int(configDict["WebSocketServerPort"])
+        self.isPi: bool = configDict["WorkMode"].upper() == "PI"
 
     def getSettings(self) -> Settings:
         settings = Settings()
@@ -67,8 +69,10 @@ class Config(Settings):
         settings["LowerTempSensorOffset"] = self.LowerTempSensorOffset
         settings["HigherTempSensorOffset"] = self.HigherTempSensorOffset
         settings["AmbientTempSensorOffset"] = self.AmbientTempSensorOffset
-        a =super().toDictionary()
-        return {"Settings": settings, "GPIO":self.GPIO, "ConnectionStrings": {item: self.ConnectionStrings[item].toDictionary()  for item in  self.ConnectionStrings}, "Logging": {"LogLevel": self.LogLevel}}
+        return {"Settings": settings,
+                "GPIO": self.GPIO,
+                "ConnectionStrings": {item: self.ConnectionStrings[item].toDictionary() for item in self.ConnectionStrings},
+                "Logging": {"LogLevel": self.LogLevel}}
     
     @staticmethod
     def getConfig(configFileName: str = 'config.json'):

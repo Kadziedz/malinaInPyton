@@ -14,14 +14,14 @@ from Models.ObjectState import ObjectState
 from Services.AutomationController import AutomationController
 from Services.DataWriter import DataWriter
 import Startup 
-from  Services.SocketServer import SocketServer
+from Services.SocketServer import SocketServer
 
 # https://www.imaginarycloud.com/blog/flask-python/
 # https://towardsdatascience.com/the-right-way-to-build-an-api-with-python-cd08ab285f8f
 # https://able.bio/rhett/how-to-set-and-get-environment-variables-in-python--274rgt5
 # https://www.loggly.com/ultimate-guide/python-logging-basics/
 # https://www.tutorialspoint.com/concurrency_in_python/concurrency_in_python_pool_of_threads.htm
-cfg= Config()
+cfg = Config()
 
 handler = logging.StreamHandler()
 formatter = OneLineExceptionFormatter(logging.BASIC_FORMAT)
@@ -33,9 +33,9 @@ logging.basicConfig(level=os.environ.get("LOGLEVEL", cfg.LogLevel))
 
 if cfg.isPi:
     import StartupPi
-    ioc = StartupPi.Startup(cfg)
+    ioc = StartupPi.startup(cfg)
 else:
-    ioc = Startup.Startup(cfg)
+    ioc = Startup.startup(cfg)
     
 plc = AutomationController(ioc)
 plc.start()
@@ -43,16 +43,17 @@ socketServer = SocketServer(ioc, cfg.WebSocketServerHost, cfg.WebSocketServerPor
 socketServer.start()
 mb: IMessageBus = ioc.getInstance(IMessageBus)
 
-def sendStatusNotification(status:ObjectState):
+
+def sendStatusNotification(status: ObjectState):
     if isinstance(status, ObjectState):
         socketServer.sendMessage(status.toDictionary())  
     if isinstance(status, dict):
-        socketServer.sendMessage(status)  
-mb.register(AutomationController.EVENT_STATUS_UPDATE, sendStatusNotification )
-  
+        socketServer.sendMessage(status)
+
+
+mb.register(AutomationController.EVENT_STATUS_UPDATE, sendStatusNotification)
 
 writer = DataWriter(ioc)
-
 app = Flask(__name__)
 app.logger.setLevel(level=os.environ.get("LOGLEVEL", cfg.LogLevel))
 

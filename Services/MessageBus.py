@@ -4,6 +4,7 @@ from Models.Settings import Settings
 from Models.ObjectState import ObjectState
 import logging
 
+
 class Event(object):
 
     def __init__(self):
@@ -23,22 +24,26 @@ class Event(object):
             result = eventHandler(*args, **keywargs)
         return result
 
+
 class MessageBus(IMessageBus):
     
     EVENT_SETTINGS_UPDATE: str = __name__ + ".onSettingsUpdate"
-    EVENT_NEW_COMMAND: str = __name__ +".onNewCommand"
-    EVENT_NEW_STATUS: str = __name__ +".onNewStatus"
-    EVENT_DELETE_OLD_DATA: str = __name__ +".onDeleteOldData"
+    EVENT_NEW_COMMAND: str = __name__ + ".onNewCommand"
+    EVENT_NEW_STATUS: str = __name__ + ".onNewStatus"
+    EVENT_DELETE_OLD_DATA: str = __name__ + ".onDeleteOldData"
+
     def __init__(self) -> None:
         super().__init__()
         self._logger = logging.getLogger(__name__)
         self._settings = Settings()
         self._status = ObjectState()
-        self._events = {MessageBus.EVENT_NEW_COMMAND: Event(), MessageBus.EVENT_NEW_STATUS: Event(), MessageBus.EVENT_SETTINGS_UPDATE: Event()}
+        self._events = {MessageBus.EVENT_NEW_COMMAND: Event(),
+                        MessageBus.EVENT_NEW_STATUS: Event(),
+                        MessageBus.EVENT_SETTINGS_UPDATE: Event()}
         self._lock = Lock()
         
     def register(self, eventType: str, handler) -> bool:
-        if not eventType in self._events:
+        if eventType not in self._events:
             self._events[eventType] = Event()
         if not callable(handler):
             return False
@@ -46,7 +51,7 @@ class MessageBus(IMessageBus):
         return True
 
     def unregister(self, eventType: str, handler) -> bool:
-        if not eventType in self._events or not callable(handler):
+        if eventType not in self._events or not callable(handler):
             return False
         self._events[eventType] -= handler
         return True
@@ -87,15 +92,14 @@ class MessageBus(IMessageBus):
         self.__onEvent(MessageBus.EVENT_NEW_STATUS, self._status)   
 
     def executeCommand(self, command: str) -> bool:
-        if(isinstance(command, str)):
+        if isinstance(command, str):
             self._logger.debug(str(command)+" command received")
             return self.__onEvent(MessageBus.EVENT_NEW_COMMAND, command)
         return False
     
-    def sendEvent(self, eventArg:object)->None:
-        eventType:str = str(type(eventArg))
+    def sendEvent(self, eventArg: object) -> None:
+        eventType: str = str(type(eventArg))
         self.__onEvent(eventType, eventArg)
         
-    def sendNamedEvent(self, eventType:str, eventArg:object)->None:
+    def sendNamedEvent(self, eventType: str, eventArg: object) -> None:
         self.__onEvent(eventType, eventArg)
-
