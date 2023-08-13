@@ -2,18 +2,17 @@ import logging
 from threading import Lock, Thread
 from Interfaces.IContainer import IContainer
 
-from Interfaces.IMessageBus import IMessageBus
 from Models.DTO.dtos import DataPoint
 from Models.Settings import Settings
 from Repository.DatabaseContext import DatabaseContext
-from Services.MessageBus import MessageBus
+from Services.AutomationStatusBroker import AutomationStatusBroker
 from Models.Measurements import Measurements
 
 
 class DataWriter(object):
     def __init__(self, ioc: IContainer) -> None:
         self._databaseContext: DatabaseContext = ioc.getInstance(DatabaseContext)
-        self._messageBus: IMessageBus = ioc.getInstance(IMessageBus)
+        self._messageBus: AutomationStatusBroker = ioc.getInstance(AutomationStatusBroker)
         rawData = self._databaseContext.getDevices()
         self._devicesByName = {item.Name: item for item in rawData}
         self._devicesById = {item.Id: item for item in rawData}
@@ -22,13 +21,13 @@ class DataWriter(object):
         self.__eventType = str(Measurements)
         self._lock: Lock = Lock()
         self._messageBus.register(self.__eventType, self.onStoreData)
-        self._messageBus.register(MessageBus.EVENT_SETTINGS_UPDATE, self.onNewSettings)
-        self._messageBus.register(MessageBus.EVENT_DELETE_OLD_DATA, self.onDeleteOldData)
+        self._messageBus.register(AutomationStatusBroker.EVENT_SETTINGS_UPDATE, self.onNewSettings)
+        self._messageBus.register(AutomationStatusBroker.EVENT_DELETE_OLD_DATA, self.onDeleteOldData)
     
     def __del__(self):
         self._messageBus.unregister(self.__eventType, self.onStoreData)
-        self._messageBus.unregister(MessageBus.EVENT_SETTINGS_UPDATE, self.onNewSettings)
-        self._messageBus.unregister(MessageBus.EVENT_DELETE_OLD_DATA, self.onDeleteOldData)
+        self._messageBus.unregister(AutomationStatusBroker.EVENT_SETTINGS_UPDATE, self.onNewSettings)
+        self._messageBus.unregister(AutomationStatusBroker.EVENT_DELETE_OLD_DATA, self.onDeleteOldData)
 
     def onStoreData(self, measurements: Measurements) -> None:
         Thread(target=self.__storeMeasurements, kwargs={'measurements': measurements}).start()

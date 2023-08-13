@@ -14,7 +14,7 @@ from Models.ObjectState import ObjectState
 from Models.Settings import Settings
 from Models.Thermometer import Thermometer
 from Repository.DatabaseContext import DatabaseContext
-from Services.MessageBus import MessageBus
+from Services.AutomationStatusBroker import AutomationStatusBroker
 from Models.Measurements import Measurements
 from concurrent.futures import ThreadPoolExecutor
 
@@ -31,7 +31,7 @@ class AutomationController(Thread):
         super().__init__()
         self._executor = ThreadPoolExecutor(1)
         self._databaseContext: DatabaseContext = ioc.getInstance(DatabaseContext)
-        self._messageBus: IMessageBus = ioc.getInstance(IMessageBus)
+        self._messageBus: AutomationStatusBroker = ioc.getInstance(IMessageBus)
         self._meters: dict = ioc.getInstance("thermometers")
         self._coils: dict = ioc.getInstance("coils")
         self._filter: IMeasurementFilter = ioc.getInstance(IMeasurementFilter)
@@ -47,13 +47,13 @@ class AutomationController(Thread):
         (self._devices, self._actualState) = AutomationController.__initializeDataStructures(self._actualSettings, [key for key in self._meters], self._messageBus, self._databaseContext)
         self._messageBus.updateStatus(self._actualState)
         self._logger: logging = logging.getLogger(__name__)
-        self._messageBus.register(MessageBus.EVENT_NEW_COMMAND, self.onNewCommandReceived)
-        self._messageBus.register(MessageBus.EVENT_SETTINGS_UPDATE, self.onNewSettings)
-        # messageBusSingleton.register(MessageBus.EVENT_NEW_STATUS, self.onNewStatus)
+        self._messageBus.register(AutomationStatusBroker.EVENT_NEW_COMMAND, self.onNewCommandReceived)
+        self._messageBus.register(AutomationStatusBroker.EVENT_SETTINGS_UPDATE, self.onNewSettings)
+        # messageBusSingleton.register(AutomationStatusBroker.EVENT_NEW_STATUS, self.onNewStatus)
 
     def __del__(self):
-        self._messageBus.unregister(MessageBus.EVENT_NEW_COMMAND, self.onNewCommandReceived)
-        self._messageBus.unregister(MessageBus.EVENT_SETTINGS_UPDATE, self.onNewSettings)
+        self._messageBus.unregister(AutomationStatusBroker.EVENT_NEW_COMMAND, self.onNewCommandReceived)
+        self._messageBus.unregister(AutomationStatusBroker.EVENT_SETTINGS_UPDATE, self.onNewSettings)
     
     @staticmethod
     def __initializeDataStructures(config: Settings, physicalDeviceNamesList: list, sb: IMessageBus, db: DatabaseContext) -> tuple:
@@ -260,7 +260,7 @@ class AutomationController(Thread):
         if oldDayIndx != dayIndx:
             oldDayIndx = dayIndx
             self._logger.info(f"delete old data request")
-            self._messageBus.sendNamedEvent(MessageBus.EVENT_DELETE_OLD_DATA, oldDayIndx)
+            self._messageBus.sendNamedEvent(AutomationStatusBroker.EVENT_DELETE_OLD_DATA, oldDayIndx)
         return oldDayIndx
 
     @staticmethod

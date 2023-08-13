@@ -1,11 +1,11 @@
+from Services.AutomationStatusBroker import AutomationStatusBroker
 from flask import request
-from Interfaces.IMessageBus import IMessageBus
 from Controllers.ControllerRoot import ControllerRoot
 
 
 class SettingsController(ControllerRoot):
 
-    def __init__(self, messageBus: IMessageBus) -> None:
+    def __init__(self, messageBus: AutomationStatusBroker) -> None:
         super().__init__(messageBus)
 
     def get(self):
