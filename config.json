@@ -1,0 +1,41 @@
+{
+  "Settings": {
+    "LowerTempSensor": "28-011936392d0d",
+    "HigherTempSensor": "28-011935a9c96f",
+    "AmbientTempSensor": "28-00000eb84fe0",
+    "MinimumTempDiff": 5,
+    "IsAuto": false,
+    "DayStart": 9,
+    "DayStop": 18,
+    "DecisionDelay": 2,
+    "MeasurementSamplesCount": 10,
+    "MaxStateTime": 15,
+    "ControlInterval": 5,
+    "DataSaveInterval": 60,
+    "MinimumAmbientTemp": 23,
+    "LowerTempSensorOffset": 0,
+    "HigherTempSensorOffset": 0,
+    "AmbientTempSensorOffset": 0
+  },
+  "GPIO": {
+    "RedLED": 5,
+    "GreenLED": 3,
+    "YellowLED": 2,
+    "BlinkingLED": 7,
+    "Relay": 6
+  },
+  "WorkMode":"PI",
+  "WebSocketServerHost": "127.0.0.1",
+  "WebSocketServerPort": 8123,
+  "ConnectionStrings": {
+    "ControlDB": {
+      "User": "",
+      "Password": "",
+      "Host": "",
+      "Database": ""
+    }
+  },
+  "Logging": {
+    "LogLevel": "WARNING"
+  }
+}

@@ -1,0 +1,8 @@
+<?php
+$cmd = $_GET["cmd"];
+require_once('RestHelper.php');
+$worker = new RestHelper();
+header('Content-Type: application/json');
+$result = $worker->CallAPI("GET",'api/cmd/'.$cmd);
+echo $result;
+?>
